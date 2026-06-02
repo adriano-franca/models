@@ -1,0 +1,213 @@
+Epoca 1/50 | Loss T: 0.6870 | Loss V: 0.5643 | AUC: 0.6559 | MCC: 0.0362
+Epoca 2/50 | Loss T: 0.6651 | Loss V: 0.5209 | AUC: 0.6812 | MCC: 0.0811
+Epoca 3/50 | Loss T: 0.6393 | Loss V: 0.5054 | AUC: 0.6903 | MCC: 0.1487
+Epoca 4/50 | Loss T: 0.6154 | Loss V: 0.4978 | AUC: 0.7000 | MCC: 0.1124
+Epoca 5/50 | Loss T: 0.5808 | Loss V: 0.4907 | AUC: 0.7088 | MCC: 0.0951
+Epoca 6/50 | Loss T: 0.5382 | Loss V: 0.4830 | AUC: 0.7539 | MCC: 0.1510
+Epoca 7/50 | Loss T: 0.4970 | Loss V: 0.4964 | AUC: 0.7345 | MCC: 0.1358
+Epoca 8/50 | Loss T: 0.4681 | Loss V: 0.4793 | AUC: 0.7421 | MCC: 0.1662
+Epoca 9/50 | Loss T: 0.4652 | Loss V: 0.4676 | AUC: 0.7446 | MCC: 0.1452
+Epoca 10/50 | Loss T: 0.4202 | Loss V: 0.5039 | AUC: 0.7446 | MCC: 0.1476
+Epoca 11/50 | Loss T: 0.3838 | Loss V: 0.5009 | AUC: 0.7370 | MCC: 0.1468
+Epoca 12/50 | Loss T: 0.3493 | Loss V: 0.5166 | AUC: 0.7252 | MCC: 0.1641
+Epoca 13/50 | Loss T: 0.3424 | Loss V: 0.5441 | AUC: 0.7353 | MCC: 0.1852
+Epoca 14/50 | Loss T: 0.3164 | Loss V: 0.5878 | AUC: 0.7208 | MCC: 0.1536
+Epoca 15/50 | Loss T: 0.2985 | Loss V: 0.6173 | AUC: 0.7465 | MCC: 0.1819
+Epoca 16/50 | Loss T: 0.2620 | Loss V: 0.6732 | AUC: 0.7244 | MCC: 0.1779
+Epoca 17/50 | Loss T: 0.2369 | Loss V: 0.7998 | AUC: 0.7125 | MCC: 0.1722
+Epoca 18/50 | Loss T: 0.2213 | Loss V: 0.8538 | AUC: 0.7331 | MCC: 0.2498
+Epoca 19/50 | Loss T: 0.2073 | Loss V: 0.7720 | AUC: 0.7453 | MCC: 0.1939
+Epoca 20/50 | Loss T: 0.1839 | Loss V: 0.7462 | AUC: 0.7402 | MCC: 0.2240
+Epoca 21/50 | Loss T: 0.1629 | Loss V: 0.8595 | AUC: 0.7352 | MCC: 0.2134
+Epoca 22/50 | Loss T: 0.1485 | Loss V: 0.8726 | AUC: 0.7375 | MCC: 0.2143
+Epoca 23/50 | Loss T: 0.1389 | Loss V: 0.9198 | AUC: 0.7368 | MCC: 0.2128
+Epoca 24/50 | Loss T: 0.1345 | Loss V: 1.0001 | AUC: 0.7306 | MCC: 0.2611
+Rodou de 17h do dia 19/05 às 10h do dia 20/05, totalizando 17h de treinamento. Parei o treinamento pois percebi que o modelo estava entrando em overfitting, os pesos foram descartados.
+Epoca 1/50 | Loss T: 0.6837 | Loss V: 0.5429 | AUC: 0.6797 | MCC: 0.1044
+Epoca 2/50 | Loss T: 0.6606 | Loss V: 0.5199 | AUC: 0.6911 | MCC: 0.0600
+Treinamento interrompido pois tive que desligar o pc
+Iniciando novo dia 20/05 com alterações no código para exibir matriz de confusão e evitar overfitting
+Epoca 1/50 | Loss T: 0.6885 | Loss V: 0.5474 | AUC: 0.6080 | MCC: 0.0268
+Matriz de Confusão -> TP:20 | FN:18 | TN:523 | FP:439
+Epoca 2/50 | Loss T: 0.6639 | Loss V: 0.5119 | AUC: 0.6910 | MCC: 0.1034
+Matriz de Confusão -> TP:14 | FN:24 | TN:804 | FP:158
+Epoca 3/50 | Loss T: 0.6312 | Loss V: 0.5157 | AUC: 0.7076 | MCC: 0.0974
+Matriz de Confusão -> TP:33 | FN:5 | TN:363 | FP:599
+Epoca 4/50 | Loss T: 0.6091 | Loss V: 0.4712 | AUC: 0.7342 | MCC: 0.1484
+Matriz de Confusão -> TP:25 | FN:13 | TN:675 | FP:287
+Epoca 5/50 | Loss T: 0.5522 | Loss V: 0.4685 | AUC: 0.7549 | MCC: 0.1885
+Matriz de Confusão -> TP:20 | FN:18 | TN:812 | FP:150
+Epoca 6/50 | Loss T: 0.5367 | Loss V: 0.4680 | AUC: 0.7584 | MCC: 0.1707
+Matriz de Confusão -> TP:23 | FN:15 | TN:746 | FP:216
+Epoca 7/50 | Loss T: 0.4987 | Loss V: 0.4703 | AUC: 0.7420 | MCC: 0.1841
+Matriz de Confusão -> TP:22 | FN:16 | TN:779 | FP:183
+Epoca 8/50 | Loss T: 0.4762 | Loss V: 0.4716 | AUC: 0.7281 | MCC: 0.1656
+Matriz de Confusão -> TP:21 | FN:17 | TN:771 | FP:191
+Epoca 9/50 | Loss T: 0.4573 | Loss V: 0.4756 | AUC: 0.7585 | MCC: 0.1712
+Matriz de Confusão -> TP:20 | FN:18 | TN:793 | FP:169
+Epoca 10/50 | Loss T: 0.4286 | Loss V: 0.4901 | AUC: 0.7496 | MCC: 0.1645
+Matriz de Confusão -> TP:17 | FN:21 | TN:828 | FP:134
+Epoca 11/50 | Loss T: 0.3935 | Loss V: 0.5256 | AUC: 0.7382 | MCC: 0.1615
+Matriz de Confusão -> TP:17 | FN:21 | TN:825 | FP:137
+Epoca 12/50 | Loss T: 0.3596 | Loss V: 0.5484 | AUC: 0.7460 | MCC: 0.1487
+Matriz de Confusão -> TP:13 | FN:25 | TN:866 | FP:96
+Epoca 13/50 | Loss T: 0.3396 | Loss V: 0.5565 | AUC: 0.7287 | MCC: 0.1420
+Matriz de Confusão -> TP:14 | FN:24 | TN:847 | FP:115
+Parei o treinamento por conta do overfitting
+Iniciando treinamento com BinaryFocalLoss
+Dia 22/05
+Epoca 1/50 | Loss T: 0.0018 | Loss V: 0.0006 | AUC: 0.5189 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 2/50 | Loss T: 0.0008 | Loss V: 0.0016 | AUC: 0.5226 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 3/50 | Loss T: 0.0007 | Loss V: 0.0005 | AUC: 0.5875 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 4/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.6309 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 5/50 | Loss T: 0.0006 | Loss V: 0.0006 | AUC: 0.6005 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 6/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.6124 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 7/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.5891 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 8/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.5629 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 9/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.5739 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 10/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.6021 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 11/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.4765 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 12/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.5988 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 13/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.5732 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 14/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.6102 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 15/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.4622 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 16/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.5933 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 17/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.5685 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 18/50 | Loss T: 0.0015 | Loss V: 0.0005 | AUC: 0.5811 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 19/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.6351 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 20/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.6426 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 21/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.6153 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 22/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.6136 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 23/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.5968 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 24/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.6760 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 25/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.6516 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 26/50 | Loss T: 0.0006 | Loss V: 0.0006 | AUC: 0.6401 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Epoca 27/50 | Loss T: 0.0006 | Loss V: 0.0005 | AUC: 0.6789 | MCC: 0.0000
+Matriz de Confusão -> TP:38 | FN:0 | TN:0 | FP:962
+Dia 26/05
+Epoca 1/50 | Loss T: 0.0154 | Loss V: 0.0129 | AUC: 0.5809 | MCC: -0.0124
+Matriz de Confusão -> TP:37 | FN:1 | TN:17 | FP:945
+Epoca 2/50 | Loss T: 0.0147 | Loss V: 0.0128 | AUC: 0.5914 | MCC: 0.0173
+Matriz de Confusão -> TP:34 | FN:4 | TN:131 | FP:831
+Epoca 3/50 | Loss T: 0.0145 | Loss V: 0.0125 | AUC: 0.6701 | MCC: 0.2060
+Matriz de Confusão -> TP:10 | FN:28 | TN:926 | FP:36
+Epoca 4/50 | Loss T: 0.0142 | Loss V: 0.0115 | AUC: 0.7084 | MCC: 0.1637
+Matriz de Confusão -> TP:20 | FN:18 | TN:784 | FP:178
+Epoca 5/50 | Loss T: 0.0136 | Loss V: 0.0117 | AUC: 0.7148 | MCC: 0.2152
+Matriz de Confusão -> TP:14 | FN:24 | TN:898 | FP:64
+Epoca 6/50 | Loss T: 0.0128 | Loss V: 0.0120 | AUC: 0.7056 | MCC: 0.2326
+Matriz de Confusão -> TP:15 | FN:23 | TN:898 | FP:64
+Epoca 7/50 | Loss T: 0.0128 | Loss V: 0.0118 | AUC: 0.7444 | MCC: 0.1365
+Matriz de Confusão -> TP:19 | FN:19 | TN:764 | FP:198
+Epoca 8/50 | Loss T: 0.0123 | Loss V: 0.0112 | AUC: 0.7243 | MCC: 0.2220
+Matriz de Confusão -> TP:17 | FN:21 | TN:874 | FP:88
+Epoca 9/50 | Loss T: 0.0119 | Loss V: 0.0335 | AUC: 0.7174 | MCC: 0.1303
+Matriz de Confusão -> TP:28 | FN:10 | TN:576 | FP:386
+Epoca 10/50 | Loss T: 0.0113 | Loss V: 0.0116 | AUC: 0.7866 | MCC: 0.1385
+Matriz de Confusão -> TP:31 | FN:7 | TN:525 | FP:437
+Epoca 11/50 | Loss T: 0.0110 | Loss V: 0.0139 | AUC: 0.7785 | MCC: 0.1423
+Matriz de Confusão -> TP:31 | FN:7 | TN:534 | FP:428
+Epoca 12/50 | Loss T: 0.0109 | Loss V: 0.0112 | AUC: 0.8029 | MCC: 0.2015
+Matriz de Confusão -> TP:24 | FN:14 | TN:771 | FP:191
+Epoca 13/50 | Loss T: 0.0101 | Loss V: 0.0128 | AUC: 0.8078 | MCC: 0.3112
+Matriz de Confusão -> TP:13 | FN:25 | TN:936 | FP:26
+Epoca 14/50 | Loss T: 0.0099 | Loss V: 0.0133 | AUC: 0.7718 | MCC: 0.2395
+Matriz de Confusão -> TP:16 | FN:22 | TN:893 | FP:69
+Epoca 15/50 | Loss T: 0.0096 | Loss V: 0.0124 | AUC: 0.7848 | MCC: 0.1658
+Matriz de Confusão -> TP:23 | FN:15 | TN:739 | FP:223
+Epoca 16/50 | Loss T: 0.0087 | Loss V: 0.0123 | AUC: 0.8221 | MCC: 0.3436
+Matriz de Confusão -> TP:23 | FN:15 | TN:889 | FP:73
+Epoca 17/50 | Loss T: 0.0076 | Loss V: 0.0123 | AUC: 0.7960 | MCC: 0.2402
+Matriz de Confusão -> TP:21 | FN:17 | TN:846 | FP:116
+Epoca 18/50 | Loss T: 0.0067 | Loss V: 0.0138 | AUC: 0.8036 | MCC: 0.2049
+Matriz de Confusão -> TP:28 | FN:10 | TN:714 | FP:248
+Epoca 19/50 | Loss T: 0.0064 | Loss V: 0.0149 | AUC: 0.7954 | MCC: 0.2240
+Matriz de Confusão -> TP:19 | FN:19 | TN:855 | FP:107
+Epoca 20/50 | Loss T: 0.0059 | Loss V: 0.0184 | AUC: 0.8073 | MCC: 0.2285
+Matriz de Confusão -> TP:17 | FN:21 | TN:878 | FP:84
+Epoca 21/50 | Loss T: 0.0051 | Loss V: 0.0155 | AUC: 0.8177 | MCC: 0.2610
+Matriz de Confusão -> TP:22 | FN:16 | TN:851 | FP:111
+Epoca 22/50 | Loss T: 0.0044 | Loss V: 0.0212 | AUC: 0.8123 | MCC: 0.2786
+Matriz de Confusão -> TP:20 | FN:18 | TN:880 | FP:82
+Epoca 23/50 | Loss T: 0.0039 | Loss V: 0.0273 | AUC: 0.7998 | MCC: 0.2996
+Matriz de Confusão -> TP:15 | FN:23 | TN:923 | FP:39
+Epoca 24/50 | Loss T: 0.0033 | Loss V: 0.0245 | AUC: 0.8001 | MCC: 0.3092
+Matriz de Confusão -> TP:22 | FN:16 | TN:880 | FP:82
+Epoca 25/50 | Loss T: 0.0035 | Loss V: 0.0239 | AUC: 0.8094 | MCC: 0.3284
+Matriz de Confusão -> TP:21 | FN:17 | TN:896 | FP:66
+Epoca 26/50 | Loss T: 0.0034 | Loss V: 0.0266 | AUC: 0.7995 | MCC: 0.3359
+Matriz de Confusão -> TP:18 | FN:20 | TN:917 | FP:45
+Epoca 27/50 | Loss T: 0.0033 | Loss V: 0.0243 | AUC: 0.7923 | MCC: 0.2873
+Matriz de Confusão -> TP:22 | FN:16 | TN:868 | FP:94
+Epoca 28/50 | Loss T: 0.0031 | Loss V: 0.0250 | AUC: 0.7952 | MCC: 0.2732
+Matriz de Confusão -> TP:20 | FN:18 | TN:877 | FP:85
+Epoca 29/50 | Loss T: 0.0027 | Loss V: 0.0290 | AUC: 0.7949 | MCC: 0.2981
+Matriz de Confusão -> TP:19 | FN:19 | TN:897 | FP:65
+Epoca 30/50 | Loss T: 0.0024 | Loss V: 0.0321 | AUC: 0.8002 | MCC: 0.3121
+Matriz de Confusão -> TP:16 | FN:22 | TN:921 | FP:41
+Epoca 31/50 | Loss T: 0.0026 | Loss V: 0.0327 | AUC: 0.7877 | MCC: 0.2498
+Matriz de Confusão -> TP:14 | FN:24 | TN:913 | FP:49
+Epoca 32/50 | Loss T: 0.0024 | Loss V: 0.0337 | AUC: 0.7932 | MCC: 0.2639
+Matriz de Confusão -> TP:14 | FN:24 | TN:918 | FP:44
+Epoca 33/50 | Loss T: 0.0025 | Loss V: 0.0347 | AUC: 0.7968 | MCC: 0.2765
+Matriz de Confusão -> TP:14 | FN:24 | TN:922 | FP:40
+Epoca 34/50 | Loss T: 0.0023 | Loss V: 0.0325 | AUC: 0.8051 | MCC: 0.2734
+Matriz de Confusão -> TP:13 | FN:25 | TN:927 | FP:35
+Epoca 35/50 | Loss T: 0.0024 | Loss V: 0.0339 | AUC: 0.7918 | MCC: 0.2416
+Matriz de Confusão -> TP:13 | FN:25 | TN:917 | FP:45
+Epoca 36/50 | Loss T: 0.0025 | Loss V: 0.0350 | AUC: 0.7961 | MCC: 0.2331
+Matriz de Confusão -> TP:12 | FN:26 | TN:921 | FP:41
+Epoca 37/50 | Loss T: 0.0023 | Loss V: 0.0328 | AUC: 0.7935 | MCC: 0.3053
+Matriz de Confusão -> TP:17 | FN:21 | TN:913 | FP:49
+Epoca 38/50 | Loss T: 0.0023 | Loss V: 0.0307 | AUC: 0.8061 | MCC: 0.2525
+Matriz de Confusão -> TP:14 | FN:24 | TN:914 | FP:48
+Epoca 39/50 | Loss T: 0.0021 | Loss V: 0.0414 | AUC: 0.7900 | MCC: 0.2571
+Matriz de Confusão -> TP:11 | FN:27 | TN:934 | FP:28
+Epoca 40/50 | Loss T: 0.0023 | Loss V: 0.0350 | AUC: 0.7917 | MCC: 0.2664
+Matriz de Confusão -> TP:13 | FN:25 | TN:925 | FP:37
+Epoca 41/50 | Loss T: 0.0022 | Loss V: 0.0354 | AUC: 0.7913 | MCC: 0.2553
+Matriz de Confusão -> TP:14 | FN:24 | TN:915 | FP:47
+Epoca 42/50 | Loss T: 0.0021 | Loss V: 0.0344 | AUC: 0.7931 | MCC: 0.2525
+Matriz de Confusão -> TP:14 | FN:24 | TN:914 | FP:48
+Epoca 43/50 | Loss T: 0.0021 | Loss V: 0.0354 | AUC: 0.7935 | MCC: 0.2452
+Matriz de Confusão -> TP:11 | FN:27 | TN:931 | FP:31
+Epoca 44/50 | Loss T: 0.0020 | Loss V: 0.0364 | AUC: 0.7902 | MCC: 0.2664
+Matriz de Confusão -> TP:13 | FN:25 | TN:925 | FP:37
+Epoca 45/50 | Loss T: 0.0020 | Loss V: 0.0373 | AUC: 0.7876 | MCC: 0.2597
+Matriz de Confusão -> TP:13 | FN:25 | TN:923 | FP:39
+Epoca 46/50 | Loss T: 0.0019 | Loss V: 0.0380 | AUC: 0.7858 | MCC: 0.2597   
+Matriz de Confusão -> TP:13 | FN:25 | TN:923 | FP:39
+Epoca 47/50 | Loss T: 0.0017 | Loss V: 0.0362 | AUC: 0.7954 | MCC: 0.2214
+Matriz de Confusão -> TP:11 | FN:27 | TN:924 | FP:38
+Epoca 48/50 | Loss T: 0.0018 | Loss V: 0.0372 | AUC: 0.7911 | MCC: 0.2344
+Matriz de Confusão -> TP:11 | FN:27 | TN:928 | FP:34
+Epoca 49/50 | Loss T: 0.0017 | Loss V: 0.0364 | AUC: 0.7894 | MCC: 0.2214
+Matriz de Confusão -> TP:11 | FN:27 | TN:924 | FP:38
+Epoca 50/50 | Loss T: 0.0019 | Loss V: 0.0381 | AUC: 0.7869 | MCC: 0.2490
+Matriz de Confusão -> TP:12 | FN:26 | TN:926 | FP:36

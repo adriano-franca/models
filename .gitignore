@@ -2,4 +2,7 @@
 best/
 pytorch/
 patches_dataset/
-patches_annotations.csv
+utils/patches_annotations.csv
+plots/
+#checkpoints/
+dataset_patches/

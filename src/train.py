@@ -6,6 +6,7 @@ from torch.optim import AdamW
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
+import random
 
 from sklearn.metrics import roc_auc_score, matthews_corrcoef, confusion_matrix
 
@@ -27,14 +28,17 @@ def plot_confusion_matrix(y_true, y_pred, epoch, output_dir="plots"):
     plt.savefig(os.path.join(output_dir, f'cm_epoch_{epoch+1}.png'))
     plt.close()
 
-def plot_gradcam(model, valid_loader, device, epoch, output_dir="plots"):
+def plot_gradcam(model, valid_dataset, device, epoch, output_dir="plots"):
     model.eval()
 
-    img_cc, img_mlo, label = next(iter(valid_loader))
+    idx = random.randint(0, len(valid_dataset) - 1)
 
-    img_cc = img_cc[:1].to(device)
-    img_mlo = img_mlo[:1].to(device)
-    target_label = label[:1].item()
+    img_cc, img_mlo, label = valid_dataset[idx]
+
+    img_cc = img_cc.unsqueeze(0).to(device)
+    img_mlo = img_mlo.unsqueeze(0).to(device)
+
+    target_label = label.item() if isinstance(label, torch.Tensor) else label
 
     layer_alvo = model.backbone.stages[-1]
 
@@ -58,7 +62,7 @@ def plot_gradcam(model, valid_loader, device, epoch, output_dir="plots"):
     viz_mlo = (viz_mlo - viz_mlo.min()) / (viz_mlo.max() - viz_mlo.min() + 1e-8)
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 8))
-    fig.suptitle(f'Guided Grad-CAM (Alta Resolução) - Época {epoch+1} | Rótulo Real: {"Anormal" if target_label==1 else "Normal"}', fontsize=16)
+    fig.suptitle(f'Guided Grad-CAM (Alta Resolução) - Época {epoch+1} | Paciente: #{idx} | Rótulo Real: {"Anormal" if target_label==1 else "Normal"}', fontsize=16)
 
     axes[0].imshow(viz_cc, cmap='gray')
     axes[0].imshow(heatmap_cc, cmap='magma', alpha=0.5) 
@@ -93,10 +97,6 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     model = DualViewClassifier(pretrained_patch_path='checkpoints/best_patch_classifier.pth').to(device)
-    
-    print("Congelando backbone")
-    for param in model.backbone.parameters():
-        param.requires_grad = False
 
     peso_anormal = torch.tensor([8.0]).to(device)
     criterion = nn.BCEWithLogitsLoss(pos_weight=peso_anormal)
@@ -107,6 +107,19 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
 
     for epoch in range(epochs):
         print(f"\n--- Época {epoch+1}/{epochs} ---")
+
+        if epoch == 0:
+            print("\nCongelando o backbone...")
+            for param in model.backbone.parameters():
+                param.requires_grad = False
+                
+        elif epoch == 4:
+            print("\nDescongelando o backbone...")
+            for param in model.backbone.parameters():
+                param.requires_grad = True
+                
+            for g in optimizer.param_groups:
+                g['lr'] = 1e-5 
 
         model.train()
         train_loss = 0.0
@@ -169,10 +182,10 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
         print(f"Métricas: AUC = {val_auc:.4f} | MCC = {val_mcc:.4f}")
 
         plot_confusion_matrix(all_labels, all_preds, epoch)
-        
+
         # O Captum requer cálculo de gradientes para o Grad-CAM, por isso ligamos temporariamente
         with torch.set_grad_enabled(True):
-            plot_gradcam(model, valid_loader, device, epoch)
+            plot_gradcam(model, valid_dataset, device, epoch)
 
         # Salvando o melhor modelo com base na AUC
         if val_auc > best_auc:

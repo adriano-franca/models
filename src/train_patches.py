@@ -93,7 +93,7 @@ def train_patch_model():
     criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([peso_positivo]).to(DEVICE))
     optimizer = AdamW(model.parameters(), lr=LR, weight_decay=1e-2)
     
-    melhor_auc = 0.0
+    melhor_mcc = -1.0
     os.makedirs('checkpoints', exist_ok=True)
     
     for epoch in range(EPOCHS):
@@ -141,11 +141,11 @@ def train_patch_model():
         print(f"Métricas: AUC = {auc:.4f} | MCC = {mcc:.4f}\n")
         
         # Guardar o melhor modelo
-        if auc > melhor_auc:
-            melhor_auc = auc
+        if mcc > melhor_mcc:
+            melhor_mcc = mcc
             caminho_save = 'checkpoints/best_patch_classifier.pth'
             torch.save(model.state_dict(), caminho_save)
-            print(f"Novo melhor modelo guardado! (AUC: {auc:.4f})")
+            print(f"Novo melhor modelo guardado! (MCC: {mcc:.4f})")
 
 if __name__ == "__main__":
     train_patch_model()

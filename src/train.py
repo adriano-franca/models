@@ -103,7 +103,7 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
 
     optimizer = AdamW(model.parameters(), lr=lr, weight_decay=1e-2)
 
-    best_auc = 0.0
+    best_mcc = -1.0
 
     for epoch in range(epochs):
         print(f"\n--- Época {epoch+1}/{epochs} ---")
@@ -187,9 +187,9 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
         with torch.set_grad_enabled(True):
             plot_gradcam(model, valid_dataset, device, epoch)
 
-        # Salvando o melhor modelo com base na AUC
-        if val_auc > best_auc:
-            best_auc = val_auc
+        # Salvando o melhor modelo com base na MCC
+        if val_mcc > best_mcc:
+            best_mcc = val_mcc
             torch.save(model.state_dict(), 'checkpoints/best_dual_view_model.pth')
             print(">>> Novo melhor modelo guardado no disco! <<<")
 

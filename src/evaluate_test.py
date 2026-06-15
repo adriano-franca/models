@@ -10,7 +10,7 @@ import seaborn as sns
 
 # Importações da sua arquitetura
 from src.dataset import TwoViewMammogramDataset, get_valid_transforms
-from src.models import DualViewClassifier
+from src.models import DualViewClassifier, DualViewDenseNet
 
 def plot_final_confusion_matrix(y_true, y_pred, limiar, output_dir="plots"):
     cm = confusion_matrix(y_true, y_pred)
@@ -40,45 +40,41 @@ def evaluate_on_test():
 
     # 2. Instanciar a arquitetura e carregar o "Cérebro Campeão"
     # Passamos pretrained_patch_path=None porque vamos sobrescrever a rede inteira com os pesos finais
-    model = DualViewClassifier(pretrained_patch_path=None).to(device)
-    
-    modelo_path = 'checkpoints/best_dual_view_model.pth'
-    if not os.path.exists(modelo_path):
-        print(f"❌ ERRO: Ficheiro {modelo_path} não encontrado! Certifique-se de que o treino terminou.")
-        return
+    # Carregar ConvNeXt (O Especialista 1)
+    model_A = DualViewClassifier(pretrained_patch_path=None).to(device)
+    model_A.load_state_dict(torch.load('checkpoints/best_dual_view_model.pth'))
+    model_A.eval()
 
-    print("🧠 A carregar os pesos do modelo campeão...")
-    model.load_state_dict(torch.load(modelo_path))
-    model.eval() # Modo de avaliação estrito (desliga Dropout, etc.)
+    # Carregar DenseNet (O Especialista 2)
+    model_B = DualViewDenseNet(pretrained=False).to(device)
+    model_B.load_state_dict(torch.load('checkpoints/best_dual_view_densenet.pth'))
+    model_B.eval()
 
-    # 3. Inferência (O Exame)
-    # 3. Inferência (O Exame com Test-Time Augmentation)
     all_labels = []
     all_probs = []
 
     with torch.no_grad(): 
-        loop = tqdm(test_loader, desc="A avaliar Teste (com TTA)")
+        loop = tqdm(test_loader, desc="A avaliar Teste (Ensemble + TTA)")
         for img_cc, img_mlo, labels in loop:
             img_cc, img_mlo = img_cc.to(device), img_mlo.to(device)
             
             # --- 1ª OPINIÃO (Imagens Originais) ---
-            outputs_orig = model(img_cc, img_mlo)
-            probs_orig = torch.sigmoid(outputs_orig)
+            prob_A_orig = torch.sigmoid(model_A(img_cc, img_mlo)).item()
+            prob_B_orig = torch.sigmoid(model_B(img_cc, img_mlo)).item()
+            prob_orig = (prob_A_orig + prob_B_orig) / 2.0
             
-            # --- 2ª OPINIÃO (Imagens Espelhadas/Flip Horizontal) ---
-            # O tensor de imagem tem a forma [Batch, Canais, Altura, Largura]
-            # dims=[3] faz o espelhamento no eixo da Largura (Width)
+            # --- 2ª OPINIÃO (TTA / Flip Horizontal) ---
             img_cc_flip = torch.flip(img_cc, dims=[3])
             img_mlo_flip = torch.flip(img_mlo, dims=[3])
             
-            outputs_flip = model(img_cc_flip, img_mlo_flip)
-            probs_flip = torch.sigmoid(outputs_flip)
+            prob_A_flip = torch.sigmoid(model_A(img_cc_flip, img_mlo_flip)).item()
+            prob_B_flip = torch.sigmoid(model_B(img_cc_flip, img_mlo_flip)).item()
+            prob_flip = (prob_A_flip + prob_B_flip) / 2.0
             
-            # --- DECISÃO FINAL: A Média das Duas Opiniões ---
-            probs_finais = (probs_orig + probs_flip) / 2.0
+            # --- DECISÃO FINAL: A Média Absoluta ---
+            prob_final = (prob_orig + prob_flip) / 2.0
             
-            # Guardamos as probabilidades agregadas
-            all_probs.extend(probs_finais.cpu().numpy())
+            all_probs.append(prob_final)
             all_labels.extend(labels.cpu().numpy())
 
     # =======================================================

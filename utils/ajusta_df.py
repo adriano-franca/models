@@ -1,7 +1,7 @@
 import pandas as pd
 
 # 1. Lê o arquivo original
-df = pd.read_csv('breast-level_annotations_target.csv')
+df = pd.read_csv('breast-level_annotations_target_2.csv')
 
 # 2. Cria a coluna com o caminho final do arquivo DICOM
 # Ajuste a extensão ou pasta base conforme onde você salvou as imagens no seu PC
@@ -28,4 +28,4 @@ df_pivoted.columns.name = None
 df_final = df_pivoted.dropna(subset=['path_cc', 'path_mlo'])
 
 # 8. Salva o novo DataFrame para ser usado no treinamento
-df_final.to_csv('breast-level_annotations_grouped.csv', index=False)
+df_final.to_csv('breast-level_annotations_grouped_2.csv', index=False)

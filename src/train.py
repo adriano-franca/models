@@ -9,7 +9,7 @@ import numpy as np
 import random
 import wandb
 
-from sklearn.metrics import roc_auc_score, matthews_corrcoef, confusion_matrix
+from sklearn.metrics import roc_auc_score, matthews_corrcoef, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -190,11 +190,21 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
         try:
             val_auc = roc_auc_score(all_labels, all_probs)
             val_mcc = matthews_corrcoef(all_labels, all_preds)
+
+            val_acc = accuracy_score(all_labels, all_preds)
+            val_prec = precision_score(all_labels, all_preds, zero_division=0)
+            val_sens = recall_score(all_labels, all_preds, zero_division=0)
+            val_f1 = f1_score(all_labels, all_preds, zero_division=0)
+
+            tn, fp, fn, tp = confusion_matrix(all_labels, all_preds).ravel()
+            val_spec = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+
         except ValueError:
             val_auc, val_mcc = 0.0, 0.0 
+            val_acc, val_prec, val_sens, val_f1, val_spec = 0.0, 0.0, 0.0, 0.0, 0.0
 
         print(f"Perda: Treino {avg_train_loss:.4f} | Valid {avg_valid_loss:.4f}")
-        print(f"Métricas: AUC = {val_auc:.4f} | MCC = {val_mcc:.4f}")
+        print(f"Métricas: AUC={val_auc:.4f} | MCC={val_mcc:.4f} | Acc={val_acc:.4f} | Sens={val_sens:.4f} | Espec={val_spec:.4f} | Prec={val_prec:.4f} | F1={val_f1:.4f}")
 
         paciente_idx = random.randint(0, len(valid_dataset) - 1)
         rotulo_previsto = int(all_preds[paciente_idx].item())
@@ -223,6 +233,11 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
             "loss/validation": avg_valid_loss,
             "metrics/auc": val_auc,
             "metrics/mcc": val_mcc,
+            "metrics/acuracia": val_acc,
+            "metrics/precisao": val_prec,
+            "metrics/sensibilidade": val_sens,
+            "metrics/especificidade": val_spec,
+            "metrics/f1_score": val_f1,
             "metrics/limiar": 0.5,
             "learning_rate": optimizer.param_groups[0]['lr'],
             "graficos/matriz_confusao": wandb.Image(cm_path),

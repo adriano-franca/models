@@ -29,10 +29,8 @@ def plot_confusion_matrix(y_true, y_pred, epoch, output_dir="plots"):
     plt.savefig(os.path.join(output_dir, f'cm_epoch_{epoch+1}.png'))
     plt.close()
 
-def plot_gradcam(model, valid_dataset, device, predicted_label, epoch, output_dir="plots"):
+def plot_gradcam(model, valid_dataset, device, predicted_label, epoch, idx, output_dir="plots"):
     model.eval()
-
-    idx = random.randint(0, len(valid_dataset) - 1)
 
     img_cc, img_mlo, label = valid_dataset[idx]
 
@@ -201,8 +199,14 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
         paciente_idx = random.randint(0, len(valid_dataset) - 1)
         rotulo_previsto = int(all_preds[paciente_idx].item())
 
-        print(f"Rótulos Reais:     {all_labels.flatten().astype(int).tolist()}")
-        print(f"Rótulos Previstos: {all_preds.flatten().astype(int).tolist()}")
+        rotulo_real = int(all_labels[paciente_idx].item())
+        probabilidade = float(all_probs[paciente_idx].item()) * 100
+
+        str_real = "Anormal" if rotulo_real == 1 else "Normal"
+        str_previsto = "Anormal" if rotulo_previsto == 1 else "Normal"
+        
+        # Imprime apenas uma linha limpa no terminal com a informação do paciente escolhido
+        print(f"🔍 Grad-CAM (Paciente #{paciente_idx}) -> Real: {str_real} | Previsto: {str_previsto} (Certeza: {probabilidade:.1f}%)")
 
         cm_path = os.path.join('plots', f'cm_epoch_{epoch+1}.png')
         gc_path = os.path.join('plots', f'gradcam_epoch_{epoch+1}.png')

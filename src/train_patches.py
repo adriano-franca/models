@@ -143,7 +143,7 @@ def train_patch_model():
         # Guardar o melhor modelo
         if mcc > melhor_mcc:
             melhor_mcc = mcc
-            caminho_save = 'checkpoints/best_patch_classifier.pth'
+            caminho_save = 'checkpoints/best_patch_classifier_modified.pth'
             torch.save(model.state_dict(), caminho_save)
             print(f"Novo melhor modelo guardado! (MCC: {mcc:.4f})")
 

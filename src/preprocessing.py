@@ -16,6 +16,13 @@ def load_dicom_array(file_path):
 
     return img
 
+def align_laterality(img, laterality):
+    if laterality == 'L':
+        img = np.fliplr(img)
+        img = np.ascontiguousarray(img)
+
+    return img
+
 def apply_otsu_and_clip(img):
     img_8bit = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
@@ -41,14 +48,21 @@ def apply_otsu_and_clip(img):
 
     return img_clipped
 
-def process_dicom(file_path, target_width=896, target_height=1152):
+def process_dicom(file_path, laterality, target_width=896, target_height=1152):
     
+    # 1. Carrega o array em float32
     img = load_dicom_array(file_path)
 
+    # 2. Padroniza a lateralidade usando a informação exata do CSV
+    img = align_laterality(img, laterality)
+
+    # 3. Aplica a máscara e o clipping de anomalias de brilho
     img = apply_otsu_and_clip(img)
 
+    # 4. Redimensiona para o tamanho de entrada da rede
     img_resized = cv2.resize(img, (target_width, target_height), interpolation=cv2.INTER_AREA)
 
+    # 5. Normalização Z-Score
     mu_img = np.mean(img_resized)
     std_img = np.std(img_resized)
 
@@ -57,6 +71,7 @@ def process_dicom(file_path, target_width=896, target_height=1152):
     else:
         img_normalized = img_resized - mu_img
 
+    # 6. Adiciona a dimensão do canal (1, H, W) para o PyTorch
     img_tensor_ready = np.expand_dims(img_normalized, axis=0)
 
     return img_tensor_ready

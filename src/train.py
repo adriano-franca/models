@@ -85,7 +85,7 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
     os.makedirs('checkpoints', exist_ok=True)
     os.makedirs('plots', exist_ok=True)
 
-    df = pd.read_csv('breast-level_annotations_grouped_80_10_10.csv')
+    df = pd.read_csv('breast-level_annotations_grouped_80_10_10(2).csv')
     train_df = df[df['split'] == 'training'].reset_index(drop=True)
     valid_df = df[df['split'] == 'validation'].reset_index(drop=True)
     test_df = df[df['split'] == 'test'].reset_index(drop=True)
@@ -96,7 +96,7 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
-    model = DualViewClassifier(pretrained_patch_path='checkpoints/best_patch_classifier.pth').to(device)
+    model = DualViewClassifier(pretrained_patch_path='checkpoints/best_patch_classifier_modified.pth').to(device)
 
     peso_anormal = torch.tensor([8.0]).to(device)
     criterion = nn.BCEWithLogitsLoss(pos_weight=peso_anormal)
@@ -190,8 +190,8 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
         # Salvando o melhor modelo com base na MCC
         if val_mcc > best_mcc:
             best_mcc = val_mcc
-            torch.save(model.state_dict(), 'checkpoints/best_dual_view_model.pth')
+            torch.save(model.state_dict(), 'checkpoints/best_dual_view_model_modified.pth')
             print(">>> Novo melhor modelo guardado no disco! <<<")
 
 if __name__ == "__main__":
-    train_dual_view_model('breast-level_annotations_final_limpo.csv')
+    train_dual_view_model('breast-level_annotations_final_limpo(2).csv')

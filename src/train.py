@@ -7,6 +7,7 @@ from tqdm import tqdm
 import pandas as pd
 import numpy as np
 import random
+import wandb
 
 from sklearn.metrics import roc_auc_score, matthews_corrcoef, confusion_matrix
 
@@ -28,7 +29,7 @@ def plot_confusion_matrix(y_true, y_pred, epoch, output_dir="plots"):
     plt.savefig(os.path.join(output_dir, f'cm_epoch_{epoch+1}.png'))
     plt.close()
 
-def plot_gradcam(model, valid_dataset, device, epoch, output_dir="plots"):
+def plot_gradcam(model, valid_dataset, device, predicted_label, epoch, output_dir="plots"):
     model.eval()
 
     idx = random.randint(0, len(valid_dataset) - 1)
@@ -61,8 +62,11 @@ def plot_gradcam(model, valid_dataset, device, epoch, output_dir="plots"):
     viz_cc = (viz_cc - viz_cc.min()) / (viz_cc.max() - viz_cc.min() + 1e-8)
     viz_mlo = (viz_mlo - viz_mlo.min()) / (viz_mlo.max() - viz_mlo.min() + 1e-8)
 
+    str_real = "Anormal" if target_label == 1 else "Normal"
+    str_previsto = "Anormal" if predicted_label == 1 else "Normal"
+
     fig, axes = plt.subplots(1, 2, figsize=(12, 8))
-    fig.suptitle(f'Guided Grad-CAM (Alta Resolução) - Época {epoch+1} | Paciente: #{idx} | Rótulo Real: {"Anormal" if target_label==1 else "Normal"}', fontsize=16)
+    fig.suptitle(f'Guided Grad-CAM - Época {epoch+1} | Paciente: #{idx}\nRótulo Real: {str_real} | Previsto pela Rede: {str_previsto}', fontsize=16, fontweight='bold')
 
     axes[0].imshow(viz_cc, cmap='gray')
     axes[0].imshow(heatmap_cc, cmap='magma', alpha=0.5) 
@@ -84,6 +88,19 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
 
     os.makedirs('checkpoints', exist_ok=True)
     os.makedirs('plots', exist_ok=True)
+
+    wandb.init(
+        project="mestrado-visao-mamografia", 
+        name=f"DualView-PetriniModified-bs{batch_size}-acc{accumulation_steps}", 
+        config={
+            "epochs": epochs,
+            "batch_size": batch_size,
+            "learning_rate": lr,
+            "accumulation_steps": accumulation_steps,
+            "arquitetura": "DualViewClassifier",
+            "pos_weight": 8.0
+        }
+    )
 
     df = pd.read_csv('breast-level_annotations_grouped_80_10_10(2).csv')
     train_df = df[df['split'] == 'training'].reset_index(drop=True)
@@ -181,17 +198,44 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
         print(f"Perda: Treino {avg_train_loss:.4f} | Valid {avg_valid_loss:.4f}")
         print(f"Métricas: AUC = {val_auc:.4f} | MCC = {val_mcc:.4f}")
 
+        paciente_idx = random.randint(0, len(valid_dataset) - 1)
+        rotulo_previsto = int(all_preds[paciente_idx].item())
+
+        print(f"Rótulos Reais:     {all_labels.flatten().astype(int).tolist()}")
+        print(f"Rótulos Previstos: {all_preds.flatten().astype(int).tolist()}")
+
+        cm_path = os.path.join('plots', f'cm_epoch_{epoch+1}.png')
+        gc_path = os.path.join('plots', f'gradcam_epoch_{epoch+1}.png')
+
         plot_confusion_matrix(all_labels, all_preds, epoch)
 
         # O Captum requer cálculo de gradientes para o Grad-CAM, por isso ligamos temporariamente
         with torch.set_grad_enabled(True):
-            plot_gradcam(model, valid_dataset, device, epoch)
+            plot_gradcam(model, valid_dataset, device, rotulo_previsto, epoch, paciente_idx)
+
+        wandb.log({
+            "epoch": epoch + 1,
+            "loss/train": avg_train_loss,
+            "loss/validation": avg_valid_loss,
+            "metrics/auc": val_auc,
+            "metrics/mcc": val_mcc,
+            "metrics/limiar": 0.5,
+            "learning_rate": optimizer.param_groups[0]['lr'],
+            "graficos/matriz_confusao": wandb.Image(cm_path),
+            "graficos/grad_cam": wandb.Image(gc_path)
+        })
 
         # Salvando o melhor modelo com base na MCC
         if val_mcc > best_mcc:
             best_mcc = val_mcc
-            torch.save(model.state_dict(), 'checkpoints/best_dual_view_model_modified.pth')
+            model_path = 'checkpoints/best_dual_view_model_modified.pth'
+            torch.save(model.state_dict(), model_path)
             print(">>> Novo melhor modelo guardado no disco! <<<")
+
+            wandb.save(model_path)
+
+    # Encerra a sessão do Wandb
+    wandb.finish()
 
 if __name__ == "__main__":
     train_dual_view_model('breast-level_annotations_final_limpo(2).csv')

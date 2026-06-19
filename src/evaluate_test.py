@@ -23,14 +23,14 @@ def plot_final_confusion_matrix(y_true, y_pred, limiar, output_dir="plots"):
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'cm_TESTE_FINAL.png'))
     plt.close()
-    print(f"📊 Matriz de confusão guardada em: {os.path.join(output_dir, 'cm_TESTE_FINAL.png')}")
+    print(f"📊 Matriz de confusão guardada em: {os.path.join(output_dir, 'cm_TESTE_FINAL(2).png')}")
 
 def evaluate_on_test():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"🚀 A iniciar Avaliação Final no dispositivo: {device}")
 
     # 1. Carregar APENAS os dados de Teste (O Cofre)
-    df = pd.read_csv('breast-level_annotations_grouped_80_10_10.csv')
+    df = pd.read_csv('breast-level_annotations_grouped_80_10_10(2).csv')
     test_df = df[df['split'] == 'test'].reset_index(drop=True)
     print(f"📁 Pacientes no conjunto de Teste Cego: {len(test_df)}")
 
@@ -42,7 +42,7 @@ def evaluate_on_test():
     # Passamos pretrained_patch_path=None porque vamos sobrescrever a rede inteira com os pesos finais
     model = DualViewClassifier(pretrained_patch_path=None).to(device)
     
-    modelo_path = 'checkpoints/best_dual_view_model.pth'
+    modelo_path = 'checkpoints/best_dual_view_model_modified.pth'
     if not os.path.exists(modelo_path):
         print(f"❌ ERRO: Ficheiro {modelo_path} não encontrado! Certifique-se de que o treino terminou.")
         return

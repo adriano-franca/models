@@ -6,7 +6,7 @@ import os
 class PatchClassifier(nn.Module):
     def __init__(self, num_classes=5, pretrained=True):
         super(PatchClassifier, self).__init__()
-        self.model = timm.create_model('convnext_base_in22k', pretrained=pretrained, num_classes=num_classes)
+        self.model = timm.create_model('convnext_base.fb_in22k', pretrained=pretrained, num_classes=num_classes)
 
     def forward(self, x):
         return self.model(x)
@@ -16,7 +16,7 @@ class SingleViewClassifier(nn.Module):
     def __init__(self, patch_model_path=None):
         super(SingleViewClassifier, self).__init__()
 
-        self.backbone = timm.create_model('convnext_base_in22k', pretrained=False, num_classes=0, in_chans=1)
+        self.backbone = timm.create_model('convnext_base.fb_in22k', pretrained=False, num_classes=0, in_chans=1)
 
         # TODO: Lógica para carregar os pesos de `patch_model_path` (se fornecido)
         # self.backbone.load_state_dict(torch.load(patch_model_path), strict=False)
@@ -39,7 +39,7 @@ class DualViewClassifier(nn.Module):
     def __init__(self, pretrained_patch_path=None):
         super().__init__()
 
-        self.backbone = timm.create_model('convnext_base_in22k', pretrained=False, num_classes=0, in_chans=1)
+        self.backbone = timm.create_model('convnext_base.fb_in22k', pretrained=False, num_classes=0, in_chans=1)
 
         '''# TODO: Lógica para carregar os pesos de `single_view_model_path` 
         # self.backbone.load_state_dict(torch.load(single_view_model_path), strict=False)'''

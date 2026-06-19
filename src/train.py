@@ -9,8 +9,7 @@ import numpy as np
 import random
 import wandb
 
-from sklearn.metrics import roc_auc_score, matthews_corrcoef, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
-
+from sklearn.metrics import roc_auc_score, matthews_corrcoef, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score, precision_recall_curve
 import matplotlib.pyplot as plt
 import seaborn as sns
 from captum.attr import LayerGradCam, LayerAttribution, GuidedGradCam
@@ -35,7 +34,10 @@ def plot_gradcam(model, valid_dataset, device, predicted_label, epoch, idx, outp
     img_cc, img_mlo, label = valid_dataset[idx]
 
     img_cc = img_cc.unsqueeze(0).to(device)
+    img_cc.requires_grad = True
+
     img_mlo = img_mlo.unsqueeze(0).to(device)
+    img_mlo.requires_grad = True
 
     target_label = label.item() if isinstance(label, torch.Tensor) else label
 
@@ -55,8 +57,8 @@ def plot_gradcam(model, valid_dataset, device, predicted_label, epoch, idx, outp
     if heatmap_mlo.max() > 0:
         heatmap_mlo /= heatmap_mlo.max()
 
-    viz_cc = img_cc.squeeze().cpu().numpy()
-    viz_mlo = img_mlo.squeeze().cpu().numpy()
+    viz_cc = img_cc.squeeze().cpu().detach().numpy()
+    viz_mlo = img_mlo.squeeze().cpu().detach().numpy()
     viz_cc = (viz_cc - viz_cc.min()) / (viz_cc.max() - viz_cc.min() + 1e-8)
     viz_mlo = (viz_mlo - viz_mlo.min()) / (viz_mlo.max() - viz_mlo.min() + 1e-8)
 
@@ -80,7 +82,7 @@ def plot_gradcam(model, valid_dataset, device, predicted_label, epoch, idx, outp
     plt.savefig(os.path.join(output_dir, f'gradcam_epoch_{epoch+1}.png'))
     plt.close()
 
-def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=8, lr=1e-4):
+def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=16, lr=1e-4):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"A usar o dispositivo: {device}")
 
@@ -183,9 +185,20 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
 
         all_labels = np.array(all_labels)
         all_probs = np.array(all_probs)
+
+        # Novo cálculo de limiar baseado na curva Precision-Recall
+        precisions, recalls, thresholds = precision_recall_curve(all_labels, all_probs)
+
+        f1_scores = np.divide(2 * (precisions * recalls), (precisions + recalls), out=np.zeros_like(precisions), where=(precisions + recalls) != 0)
+
+        optimal_idx = np.argmax(f1_scores)
+        melhor_limiar_epoca = thresholds[optimal_idx] if optimal_idx < len(thresholds) else 0.5
         
+        all_preds = (all_probs >= melhor_limiar_epoca).astype(int)
+        
+        # Antigo limiar, era fixo em 0.5
         # Limiar de 0.5 para decidir se é 0 (Normal) ou 1 (Anormal)
-        all_preds = (all_probs >= 0.5).astype(int)
+        #all_preds = (all_probs >= 0.5).astype(int)
 
         try:
             val_auc = roc_auc_score(all_labels, all_probs)
@@ -238,7 +251,7 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
             "metrics/sensibilidade": val_sens,
             "metrics/especificidade": val_spec,
             "metrics/f1_score": val_f1,
-            "metrics/limiar": 0.5,
+            "metrics/limiar": melhor_limiar_epoca,
             "learning_rate": optimizer.param_groups[0]['lr'],
             "graficos/matriz_confusao": wandb.Image(cm_path),
             "graficos/grad_cam": wandb.Image(gc_path)

@@ -12,7 +12,7 @@ import wandb
 from sklearn.metrics import roc_auc_score, matthews_corrcoef, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score, precision_recall_curve
 import matplotlib.pyplot as plt
 import seaborn as sns
-from captum.attr import LayerGradCam, LayerAttribution, GuidedGradCam
+from captum.attr import GuidedGradCam
 
 from src.dataset import TwoViewMammogramDataset, get_train_transforms, get_valid_transforms
 from src.models import DualViewClassifier
@@ -166,7 +166,7 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
         valid_loss = 0.0
         all_labels = []
         all_probs = []
-
+        
         with torch.no_grad():
             loop_val = tqdm(valid_loader, desc="Validação")
             for img_cc, img_mlo, labels in loop_val:
@@ -189,10 +189,21 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
         # Novo cálculo de limiar baseado na curva Precision-Recall
         precisions, recalls, thresholds = precision_recall_curve(all_labels, all_probs)
 
-        f1_scores = np.divide(2 * (precisions * recalls), (precisions + recalls), out=np.zeros_like(precisions), where=(precisions + recalls) != 0)
+        meta_sensibilidade = 0.90
 
-        optimal_idx = np.argmax(f1_scores)
-        melhor_limiar_epoca = thresholds[optimal_idx] if optimal_idx < len(thresholds) else 0.5
+        indices_validos = np.where(recalls[:-1] >= meta_sensibilidade)[0]
+
+        if len(indices_validos) > 0:
+            # Dentre os limiares seguros, escolhe aquele que penaliza menos a Precisão
+            indice_escolhido = indices_validos[np.argmax(precisions[indices_validos])]
+            melhor_limiar_epoca = thresholds[indice_escolhido]
+        else:
+            melhor_limiar_epoca = 0.50
+
+        # f1_scores = np.divide(2 * (precisions * recalls), (precisions + recalls), out=np.zeros_like(precisions), where=(precisions + recalls) != 0)
+
+        # optimal_idx = np.argmax(f1_scores)
+        # melhor_limiar_epoca = thresholds[optimal_idx] if optimal_idx < len(thresholds) else 0.5
         
         all_preds = (all_probs >= melhor_limiar_epoca).astype(int)
         

@@ -21,7 +21,7 @@ def plot_confusion_matrix(y_true, y_pred, epoch, output_dir="plots"):
     cm = confusion_matrix(y_true, y_pred)
     plt.figure(figsize=(6, 5))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', cbar=False, xticklabels=['Normal', 'Anormal'], yticklabels=['Normal', 'Anormal'])
-    plt.title('Matriz de Confusão - Época {epoch+1}')
+    plt.title(f'Matriz de Confusão - Época {epoch+1}')
     plt.ylabel('Verdadeiro')
     plt.xlabel('Predição do Modelo')
     plt.tight_layout()
@@ -115,6 +115,7 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
 
     model = DualViewClassifier(pretrained_patch_path='checkpoints/best_patch_classifier_modified.pth').to(device)
 
+    # Restaurado o BCEWithLogitsLoss com pos_weight=8.0
     peso_anormal = torch.tensor([8.0]).to(device)
     criterion = nn.BCEWithLogitsLoss(pos_weight=peso_anormal)
 
@@ -186,30 +187,18 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
         all_labels = np.array(all_labels)
         all_probs = np.array(all_probs)
 
-        # Novo cálculo de limiar baseado na curva Precision-Recall
+        # Restaurado o cálculo do limiar dinâmico para garantir Sensibilidade >= 90%
         precisions, recalls, thresholds = precision_recall_curve(all_labels, all_probs)
-
         meta_sensibilidade = 0.90
-
         indices_validos = np.where(recalls[:-1] >= meta_sensibilidade)[0]
 
         if len(indices_validos) > 0:
-            # Dentre os limiares seguros, escolhe aquele que penaliza menos a Precisão
             indice_escolhido = indices_validos[np.argmax(precisions[indices_validos])]
             melhor_limiar_epoca = thresholds[indice_escolhido]
         else:
             melhor_limiar_epoca = 0.50
-
-        # f1_scores = np.divide(2 * (precisions * recalls), (precisions + recalls), out=np.zeros_like(precisions), where=(precisions + recalls) != 0)
-
-        # optimal_idx = np.argmax(f1_scores)
-        # melhor_limiar_epoca = thresholds[optimal_idx] if optimal_idx < len(thresholds) else 0.5
         
         all_preds = (all_probs >= melhor_limiar_epoca).astype(int)
-        
-        # Antigo limiar, era fixo em 0.5
-        # Limiar de 0.5 para decidir se é 0 (Normal) ou 1 (Anormal)
-        #all_preds = (all_probs >= 0.5).astype(int)
 
         try:
             val_auc = roc_auc_score(all_labels, all_probs)
@@ -239,7 +228,6 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
         str_real = "Anormal" if rotulo_real == 1 else "Normal"
         str_previsto = "Anormal" if rotulo_previsto == 1 else "Normal"
         
-        # Imprime apenas uma linha limpa no terminal com a informação do paciente escolhido
         print(f"🔍 Grad-CAM (Paciente #{paciente_idx}) -> Real: {str_real} | Previsto: {str_previsto} (Certeza: {probabilidade:.1f}%)")
 
         cm_path = os.path.join('plots', f'cm_epoch_{epoch+1}.png')
@@ -247,7 +235,6 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
 
         plot_confusion_matrix(all_labels, all_preds, epoch)
 
-        # O Captum requer cálculo de gradientes para o Grad-CAM, por isso ligamos temporariamente
         with torch.set_grad_enabled(True):
             plot_gradcam(model, valid_dataset, device, rotulo_previsto, epoch, paciente_idx)
 
@@ -268,7 +255,6 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
             "graficos/grad_cam": wandb.Image(gc_path)
         })
 
-        # Salvando o melhor modelo com base na MCC
         if val_mcc > best_mcc:
             best_mcc = val_mcc
             model_path = 'checkpoints/best_dual_view_model_modified.pth'
@@ -277,7 +263,6 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
 
             wandb.save(model_path)
 
-    # Encerra a sessão do Wandb
     wandb.finish()
 
 if __name__ == "__main__":

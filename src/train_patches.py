@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import timm
+import wandb
 from torch.utils.data import Dataset, DataLoader
 from torch.optim import AdamW
 from tqdm import tqdm
@@ -11,7 +12,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, matthews_corrcoef
 
 # ================= CONFIGURAÇÕES =================
-PATCHES_DIR = 'dataset_patches'
+# Certifique-se de executar o comando 'python src/train_patches.py' a partir da RAIZ do projeto
+# para que ele encontre esta pasta corretamente.
+PATCHES_DIR = 'dataset_patches' 
 BATCH_SIZE = 8
 EPOCHS = 10
 LR = 1e-4
@@ -48,54 +51,85 @@ def get_data():
     
     # Ler normais (0)
     normal_dir = os.path.join(PATCHES_DIR, 'normal')
-    for f in os.listdir(normal_dir):
-        if f.endswith('.png'):
-            paths.append(os.path.join(normal_dir, f))
-            labels.append(0)
+    if os.path.exists(normal_dir):
+        for f in os.listdir(normal_dir):
+            if f.endswith('.png'):
+                paths.append(os.path.join(normal_dir, f))
+                labels.append(0)
             
     # Ler anormais (1)
     anormal_dir = os.path.join(PATCHES_DIR, 'anormal')
-    for f in os.listdir(anormal_dir):
-        if f.endswith('.png'):
-            paths.append(os.path.join(anormal_dir, f))
-            labels.append(1)
+    if os.path.exists(anormal_dir):
+        for f in os.listdir(anormal_dir):
+            if f.endswith('.png'):
+                paths.append(os.path.join(anormal_dir, f))
+                labels.append(1)
             
-    # Divisão 80% Treino / 20% Validação
-    train_paths, valid_paths, train_labels, valid_labels = train_test_split(
-        paths, labels, test_size=0.2, random_state=42, stratify=labels
+    if len(paths) == 0:
+        raise ValueError(f"Nenhuma imagem encontrada na pasta {PATCHES_DIR}! Rode a extração primeiro.")
+
+    # ================= DIVISÃO TRIPLA (80/10/10) =================
+    # 1ª Divisão: 80% Treino / 20% Temporário
+    train_paths, temp_paths, train_labels, temp_labels = train_test_split(
+        paths, labels, test_size=0.20, random_state=42, stratify=labels
     )
     
-    return train_paths, valid_paths, train_labels, valid_labels
+    # 2ª Divisão: Divide os 20% Temporários a meio -> 10% Validação / 10% Teste
+    valid_paths, test_paths, valid_labels, test_labels = train_test_split(
+        temp_paths, temp_labels, test_size=0.50, random_state=42, stratify=temp_labels
+    )
+    
+    return train_paths, valid_paths, test_paths, train_labels, valid_labels, test_labels
 
 def train_patch_model():
     print(f"A usar o dispositivo: {DEVICE}")
     
-    train_paths, valid_paths, train_labels, valid_labels = get_data()
-    print(f"Total de Patches - Treino: {len(train_paths)} | Validação: {len(valid_paths)}")
+    # ================= WANDB INIT =================
+    wandb.init(
+        project="mestrado-visao-mamografia", 
+        name="Patch-Classifier-ConvNeXt-Final",    
+        config={
+            "learning_rate": LR,
+            "architecture": "convnext_base.fb_in22k",
+            "epochs": EPOCHS,
+            "batch_size": BATCH_SIZE,
+            "image_size": 224
+        }
+    )
+    # ===============================================
+
+    # Carrega os dados com a divisão tripla
+    train_paths, valid_paths, test_paths, train_labels, valid_labels, test_labels = get_data()
+    print(f"Total de Patches - Treino: {len(train_paths)} | Validação: {len(valid_paths)} | Teste: {len(test_paths)}")
     
+    # Cria os 3 Datasets
     train_dataset = MammogramPatchDataset(train_paths, train_labels)
     valid_dataset = MammogramPatchDataset(valid_paths, valid_labels)
+    test_dataset = MammogramPatchDataset(test_paths, test_labels)
     
+    # Cria os 3 DataLoaders
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
     valid_loader = DataLoader(valid_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
+    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
     
-    # Instanciar a ConvNeXt Base (Exatamente a mesma que usaremos depois)
-    # in_chans=1 (porque é tons de cinza), num_classes=1 (porque é binário: normal/anormal)
+    # Inicializa a ConvNeXt Base
     model = timm.create_model('convnext_base.fb_in22k', pretrained=True, in_chans=1, num_classes=1)
     model = model.to(DEVICE)
     
-    # Calcular o peso das classes para evitar o "Colapso" (a rede prever tudo como 0)
+    # Cálculo do pos_weight para balanceamento do BCE Loss
     num_normais = train_labels.count(0)
     num_anormais = train_labels.count(1)
     peso_positivo = num_normais / (num_anormais + 1e-8)
-    print(f"Peso aplicado à classe anormal: {peso_positivo:.2f}")
+    print(f"Peso aplicado à classe anormal (pos_weight): {peso_positivo:.2f}")
     
     criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([peso_positivo]).to(DEVICE))
     optimizer = AdamW(model.parameters(), lr=LR, weight_decay=1e-2)
     
     melhor_mcc = -1.0
     os.makedirs('checkpoints', exist_ok=True)
+    caminho_save = 'checkpoints/best_patch_classifier_modified.pth'
     
+    # ================= LOOP DE TREINO =================
     for epoch in range(EPOCHS):
         model.train()
         train_loss = 0
@@ -126,26 +160,75 @@ def train_patch_model():
                 loss = criterion(outputs, labels)
                 valid_loss += loss.item()
                 
-                # Guardar predições para calcular AUC e MCC
                 probs = torch.sigmoid(outputs).cpu().numpy()
                 todas_preds.extend(probs)
                 todos_labels.extend(labels.cpu().numpy())
                 
-        # Calcular Métricas
+        # Calcular Métricas de Validação
         auc = roc_auc_score(todos_labels, todas_preds)
         preds_binarias = (np.array(todas_preds) > 0.5).astype(int)
         mcc = matthews_corrcoef(todos_labels, preds_binarias)
         
+        avg_train_loss = train_loss/len(train_loader)
+        avg_valid_loss = valid_loss/len(valid_loader)
+        
         print(f"--- Fim da Época {epoch+1} ---")
-        print(f"Perda Média: Treino {train_loss/len(train_loader):.4f} | Valid {valid_loss/len(valid_loader):.4f}")
+        print(f"Perda Média: Treino {avg_train_loss:.4f} | Valid {avg_valid_loss:.4f}")
         print(f"Métricas: AUC = {auc:.4f} | MCC = {mcc:.4f}\n")
         
-        # Guardar o melhor modelo
+        # Log da época no WandB
+        wandb.log({
+            "epoch": epoch + 1,
+            "train_loss_epoch": avg_train_loss,
+            "valid_loss_epoch": avg_valid_loss,
+            "valid_auc": auc,
+            "valid_mcc": mcc
+        })
+        
+        # Salva o melhor modelo baseado no MCC da Validação
         if mcc > melhor_mcc:
             melhor_mcc = mcc
-            caminho_save = 'checkpoints/best_patch_classifier_modified.pth'
             torch.save(model.state_dict(), caminho_save)
-            print(f"Novo melhor modelo guardado! (MCC: {mcc:.4f})")
+            print(f"✅ Novo melhor modelo guardado! (MCC: {mcc:.4f})")
+            
+    # ========================================================
+    # AVALIAÇÃO FINAL NO CONJUNTO DE TESTE (PÓS-TREINO)
+    # ========================================================
+    print("\n" + "="*50)
+    print("🚀 A iniciar avaliação no Conjunto de Teste Cego...")
+    
+    # Carrega os pesos do modelo campeão
+    model.load_state_dict(torch.load(caminho_save))
+    model.eval()
+    
+    todas_preds_test = []
+    todos_labels_test = []
+    
+    with torch.no_grad():
+        for imgs, labels in tqdm(test_loader, desc="A avaliar Teste"):
+            imgs = imgs.to(DEVICE)
+            outputs = model(imgs)
+            probs = torch.sigmoid(outputs).cpu().numpy()
+            
+            todas_preds_test.extend(probs)
+            todos_labels_test.extend(labels.numpy())
+            
+    # Calcular Métricas do Teste
+    auc_test = roc_auc_score(todos_labels_test, todas_preds_test)
+    preds_binarias_test = (np.array(todas_preds_test) > 0.5).astype(int)
+    mcc_test = matthews_corrcoef(todos_labels_test, preds_binarias_test)
+    
+    print("\n🏆 RESULTADOS DEFINITIVOS (TESTE CEGO) 🏆")
+    print(f"AUC: {auc_test:.4f}")
+    print(f"MCC: {mcc_test:.4f}")
+    print("="*50)
+    
+    # Regista o resultado final no resumo do WandB
+    wandb.summary["test_auc_final"] = auc_test
+    wandb.summary["test_mcc_final"] = mcc_test
+    
+    # Fecha a sessão
+    wandb.finish()
 
 if __name__ == "__main__":
     train_patch_model()

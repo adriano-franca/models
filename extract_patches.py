@@ -12,6 +12,7 @@ BASE_DIR = '/backup/lucas/datasets/vindr-mammo/images'
 OUTPUT_DIR = 'dataset_patches'
 PATCH_SIZE = 224
 
+# Cria as pastas para as duas classes
 os.makedirs(os.path.join(OUTPUT_DIR, 'normal'), exist_ok=True)
 os.makedirs(os.path.join(OUTPUT_DIR, 'anormal'), exist_ok=True)
 # =================================================
@@ -48,30 +49,38 @@ def crop_and_resize(img, xmin, ymin, xmax, ymax, size=224):
 
 def extract_normal_patch(img, size=224):
     h, w = img.shape
-    crop_size = min(500, h, w) 
     
-    for _ in range(10): 
+    # CORREÇÃO 1 (Zoom Bug): Tamanhos variados para simular a diversidade de tamanho das lesões.
+    # Assim, os normais também terão desfoque ou nitidez variada, não dando pistas à rede.
+    crop_size = random.randint(150, 450) 
+    
+    for _ in range(20): # Tentamos 20 vezes achar tecido com o tamanho gerado
         rx = random.randint(0, w - crop_size)
         ry = random.randint(0, h - crop_size)
         patch = img[ry:ry+crop_size, rx:rx+crop_size]
         
-        if np.mean(patch) > 20:
+        # O limiar de 5000 garante que não apanhamos o fundo preto (escala 16-bits)
+        if np.mean(patch) > 5000:
             return cv2.resize(patch, (size, size), interpolation=cv2.INTER_AREA)
             
-    cy, cx = h//2, w//2
-    patch = img[cy-crop_size//2:cy+crop_size//2, cx-crop_size//2:cx+crop_size//2]
-    return cv2.resize(patch, (size, size), interpolation=cv2.INTER_AREA)
+    # Fallback se falhar as 20 tentativas (tenta tirar do centro exato da imagem)
+    return None
 
 # ================= EXECUÇÃO =================
 print("A carregar o ficheiro de anotações...")
 df = pd.read_csv(CSV_PATH)
 
+# FILTRO OTIMIZADO: Apenas as linhas que pertencem ao conjunto de Treino
+df_treino = df[df['split'] == 'training'].copy()
+
 count_anormal = 0
 count_normal = 0
 erros_leitura = 0
 
+print(f"A processar {len(df_treino)} anotações do conjunto de treino...")
 print("A extrair recortes... Isto pode demorar alguns minutos.")
-for idx, row in tqdm(df.iterrows(), total=len(df)):
+
+for idx, row in tqdm(df_treino.iterrows(), total=len(df_treino)):
     study_id = str(row['study_id'])
     image_id = str(row['image_id'])
     
@@ -79,17 +88,17 @@ for idx, row in tqdm(df.iterrows(), total=len(df)):
     if not os.path.exists(dicom_path):
         continue
         
-    # LÓGICA BLINDADA: Tem coordenada = Lesão. Não tem = Normal.
     has_bbox = not pd.isna(row['xmin'])
     
-    # Se for NORMAL, descartamos 80% logo aqui no início para ser mais rápido
+    # Se for NORMAL, aplica a sua lógica de descarte para equilibrar os dados (~20%)
     if not has_bbox:
-        # Forçamos a guardar as primeiras 50 para você ver a pasta encher rápido
         chance_de_guardar = 1.0 if count_normal < 50 else 0.2
         if random.random() > chance_de_guardar:
-            continue # Ignora esta imagem e vai para a próxima
+            continue
             
     try:
+        # CORREÇÃO 2 (Textura): Lemos a imagem original para ambos os casos.
+        # Ambas as classes vão usar exatamente a mesma fonte de píxeis para evitar enviesamento matemático.
         img = load_dicom_image(dicom_path)
         
         if has_bbox:
@@ -115,7 +124,7 @@ for idx, row in tqdm(df.iterrows(), total=len(df)):
         erros_leitura += 1
 
 print("\n=== EXTRAÇÃO CONCLUÍDA ===")
-print(f"Patches Anormais: {count_anormal}")
-print(f"Patches Normais: {count_normal}")
+print(f"Patches Anormais de Treino: {count_anormal}")
+print(f"Patches Normais de Treino: {count_normal}")
 if erros_leitura > 0:
     print(f"Aviso: {erros_leitura} imagens não puderam ser lidas (DICOM corrompido).")

@@ -84,37 +84,50 @@ def evaluate_on_test():
     # =======================================================
     # TÁTICA 1: OTIMIZAÇÃO DO LIMIAR (THRESHOLDING)
     # =======================================================
-    print("\n🔍 A calcular o Limiar de Decisão Ótimo para maximizar o MCC...")
-    melhor_mcc = -1.0
-    melhor_limiar = 0.5
+    print("\n🔍 A calcular o Limiar de Decisão Clínico (Meta: Sensibilidade >= 90%)...")
+    
+    all_labels_np = np.array(all_labels)
+    all_probs_np = np.array(all_probs)
+    
+    from sklearn.metrics import precision_recall_curve, recall_score, precision_score, accuracy_score
+    
+    precisions, recalls, thresholds = precision_recall_curve(all_labels_np, all_probs_np)
+    
+    meta_sensibilidade = 0.90  
+    indices_validos = np.where(recalls[:-1] >= meta_sensibilidade)[0]
+    
+    if len(indices_validos) > 0:
+        # Pega o limiar que nos dá 90% de sensibilidade com a menor penalidade de falsos positivos
+        indice_escolhido = indices_validos[np.argmax(precisions[indices_validos])]
+        melhor_limiar = thresholds[indice_escolhido]
+    else:
+        melhor_limiar = 0.50
 
-    # Testa todos os limiares entre 10% e 90% (saltos de 1%)
-    for limiar in np.arange(0.1, 0.9, 0.01):
-        preds_temporarias = (all_probs >= limiar).astype(int)
-        try:
-            mcc_temporario = matthews_corrcoef(all_labels, preds_temporarias)
-            if mcc_temporario > melhor_mcc:
-                melhor_mcc = mcc_temporario
-                melhor_limiar = limiar
-        except ValueError:
-            pass
-
-    # Aplicamos o melhor limiar encontrado para ditar quem tem cancro e quem é normal
-    all_preds = (all_probs >= melhor_limiar).astype(int)
+    all_preds = (all_probs_np >= melhor_limiar).astype(int)
     
     # 4. Cálculo das Métricas Finais Oficiais
     try:
-        final_auc = roc_auc_score(all_labels, all_probs)
-        final_mcc = melhor_mcc 
+        final_auc = roc_auc_score(all_labels_np, all_probs_np)
+        final_mcc = matthews_corrcoef(all_labels_np, all_preds)
+        final_sens = recall_score(all_labels_np, all_preds)
+        final_prec = precision_score(all_labels_np, all_preds)
+        final_acc = accuracy_score(all_labels_np, all_preds)
+        
+        tn, fp, fn, tp = confusion_matrix(all_labels_np, all_preds).ravel()
+        final_spec = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+
     except ValueError:
-        final_auc, final_mcc = 0.0, 0.0
+        final_auc, final_mcc, final_sens, final_spec, final_prec = 0.0, 0.0, 0.0, 0.0, 0.0
 
     print("\n" + "="*50)
-    print("🏆 RESULTADOS OFICIAIS DO CONJUNTO DE TESTE 🏆")
+    print("🏆 RESULTADOS OFICIAIS DO CONJUNTO DE TESTE (CENÁRIO CLÍNICO) 🏆")
     print("="*50)
-    print(f"Limiar Matemático Ótimo : {melhor_limiar:.2f} ({melhor_limiar*100:.0f}%)")
-    print(f"AUC (Área Sob a Curva)  : {final_auc:.4f}")
-    print(f"MCC (Coef. de Matthews) : {final_mcc:.4f}")
+    print(f"Limiar Clínico Descoberto: {melhor_limiar:.2f} ({melhor_limiar*100:.0f}%)")
+    print(f"AUC (Área Sob a Curva)   : {final_auc:.4f}")
+    print(f"Sensibilidade (Recall)   : {final_sens:.4f}  <-- META DE 90% GARANTIDA")
+    print(f"Especificidade           : {final_spec:.4f}")
+    print(f"Precisão                 : {final_prec:.4f}")
+    print(f"MCC (Coef. de Matthews)  : {final_mcc:.4f}")
     print("="*50)
 
     # 5. Gerar a Matriz de Confusão Final

@@ -1,0 +1,121 @@
+import os
+import pandas as pd
+import pydicom
+import numpy as np
+import cv2
+from tqdm import tqdm
+import random
+
+# ================= CONFIGURAÇÕES =================
+CSV_PATH = 'finding_annotations.csv'
+BASE_DIR = '/backup/lucas/datasets/vindr-mammo/images'
+OUTPUT_DIR = 'dataset_patches'
+PATCH_SIZE = 224
+
+os.makedirs(os.path.join(OUTPUT_DIR, 'normal'), exist_ok=True)
+os.makedirs(os.path.join(OUTPUT_DIR, 'anormal'), exist_ok=True)
+# =================================================
+
+def load_dicom_image(filepath):
+    dicom = pydicom.dcmread(filepath)
+    img = dicom.pixel_array.astype(np.float32)
+    
+    if dicom.PhotometricInterpretation == "MONOCHROME1":
+        img = np.max(img) - img
+        
+    img = (img - np.min(img)) / (np.max(img) - np.min(img) + 1e-8)
+    img = (img * 65535.0).astype(np.uint16)
+    return img
+
+def crop_and_resize(img, xmin, ymin, xmax, ymax, size=224):
+    h, w = img.shape
+    cx = (xmin + xmax) // 2
+    cy = (ymin + ymax) // 2
+    
+    box_w = xmax - xmin
+    box_h = ymax - ymin
+    side = int(max(box_w, box_h) * 1.1) 
+    
+    new_xmin = max(0, cx - side // 2)
+    new_ymin = max(0, cy - side // 2)
+    new_xmax = min(w, cx + side // 2)
+    new_ymax = min(h, cy + side // 2)
+    
+    patch = img[new_ymin:new_ymax, new_xmin:new_xmax]
+    if patch.size > 0:
+        patch = cv2.resize(patch, (size, size), interpolation=cv2.INTER_AREA)
+    return patch
+
+def extract_normal_patch(img, size=224):
+    h, w = img.shape
+    crop_size = min(500, h, w) 
+    
+    for _ in range(10): 
+        rx = random.randint(0, w - crop_size)
+        ry = random.randint(0, h - crop_size)
+        patch = img[ry:ry+crop_size, rx:rx+crop_size]
+        
+        if np.mean(patch) > 20:
+            return cv2.resize(patch, (size, size), interpolation=cv2.INTER_AREA)
+            
+    cy, cx = h//2, w//2
+    patch = img[cy-crop_size//2:cy+crop_size//2, cx-crop_size//2:cx+crop_size//2]
+    return cv2.resize(patch, (size, size), interpolation=cv2.INTER_AREA)
+
+# ================= EXECUÇÃO =================
+print("A carregar o ficheiro de anotações...")
+df = pd.read_csv(CSV_PATH)
+
+count_anormal = 0
+count_normal = 0
+erros_leitura = 0
+
+print("A extrair recortes... Isto pode demorar alguns minutos.")
+for idx, row in tqdm(df.iterrows(), total=len(df)):
+    study_id = str(row['study_id'])
+    image_id = str(row['image_id'])
+    
+    dicom_path = os.path.join(BASE_DIR, study_id, f"{image_id}.dicom")
+    if not os.path.exists(dicom_path):
+        continue
+        
+    # LÓGICA BLINDADA: Tem coordenada = Lesão. Não tem = Normal.
+    has_bbox = not pd.isna(row['xmin'])
+    
+    # Se for NORMAL, descartamos 80% logo aqui no início para ser mais rápido
+    if not has_bbox:
+        # Forçamos a guardar as primeiras 50 para você ver a pasta encher rápido
+        chance_de_guardar = 1.0 if count_normal < 50 else 0.2
+        if random.random() > chance_de_guardar:
+            continue # Ignora esta imagem e vai para a próxima
+            
+    try:
+        img = load_dicom_image(dicom_path)
+        
+        if has_bbox:
+            # É ANORMAL (Tem Bounding Box)
+            xmin, ymin = int(float(row['xmin'])), int(float(row['ymin']))
+            xmax, ymax = int(float(row['xmax'])), int(float(row['ymax']))
+            
+            patch = crop_and_resize(img, xmin, ymin, xmax, ymax, PATCH_SIZE)
+            if patch is not None and patch.size > 0:
+                save_path = os.path.join(OUTPUT_DIR, 'anormal', f"{image_id}_{idx}.png")
+                cv2.imwrite(save_path, patch)
+                count_anormal += 1
+                
+        else:
+            # É NORMAL (Sem coordenadas)
+            patch = extract_normal_patch(img, PATCH_SIZE)
+            if patch is not None and patch.size > 0:
+                save_path = os.path.join(OUTPUT_DIR, 'normal', f"{image_id}_{idx}.png")
+                cv2.imwrite(save_path, patch)
+                count_normal += 1
+                
+    except Exception as e:
+        erros_leitura += 1
+
+print("\n=== EXTRAÇÃO CONCLUÍDA ===")
+print(f"Patches Anormais: {count_anormal}")
+print(f"Patches Normais: {count_normal}")
+if erros_leitura > 0:
+    print(f"Aviso: {erros_leitura} imagens não puderam ser lidas (DICOM corrompido).")

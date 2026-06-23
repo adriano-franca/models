@@ -115,7 +115,6 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
 
     model = DualViewClassifier(pretrained_patch_path='checkpoints/best_patch_classifier_modified.pth').to(device)
 
-    # Restaurado o BCEWithLogitsLoss com pos_weight=8.0
     peso_anormal = torch.tensor([8.0]).to(device)
     criterion = nn.BCEWithLogitsLoss(pos_weight=peso_anormal)
 
@@ -187,7 +186,6 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
         all_labels = np.array(all_labels)
         all_probs = np.array(all_probs)
 
-        # Restaurado o cálculo do limiar dinâmico para garantir Sensibilidade >= 90%
         precisions, recalls, thresholds = precision_recall_curve(all_labels, all_probs)
         meta_sensibilidade = 0.90
         indices_validos = np.where(recalls[:-1] >= meta_sensibilidade)[0]

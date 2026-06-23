@@ -5,3 +5,8 @@ patches_dataset/
 plots/
 checkpoints/
 dataset_patches/
+wandb/
+src/__pycache__/
+*.log
+dataset_patches_antigo/
+dataset_patches_old/

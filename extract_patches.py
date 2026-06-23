@@ -7,7 +7,7 @@ from tqdm import tqdm
 import random
 
 # ================= CONFIGURAÇÕES =================
-CSV_PATH = 'finding_annotations.csv'
+CSV_PATH = 'finding_annotations_split.csv'
 BASE_DIR = '/backup/lucas/datasets/vindr-mammo/images'
 OUTPUT_DIR = 'dataset_patches'
 PATCH_SIZE = 224
@@ -50,20 +50,18 @@ def crop_and_resize(img, xmin, ymin, xmax, ymax, size=224):
 def extract_normal_patch(img, size=224):
     h, w = img.shape
     
-    # CORREÇÃO 1 (Zoom Bug): Tamanhos variados para simular a diversidade de tamanho das lesões.
-    # Assim, os normais também terão desfoque ou nitidez variada, não dando pistas à rede.
     crop_size = random.randint(150, 450) 
     
-    for _ in range(20): # Tentamos 20 vezes achar tecido com o tamanho gerado
+    for _ in range(30): # Tentamos 30 vezes achar tecido com o tamanho gerado
         rx = random.randint(0, w - crop_size)
         ry = random.randint(0, h - crop_size)
         patch = img[ry:ry+crop_size, rx:rx+crop_size]
         
-        # O limiar de 5000 garante que não apanhamos o fundo preto (escala 16-bits)
-        if np.mean(patch) > 5000:
+        # O limiar de 15000 garante que não apanhamos o fundo preto (escala 16-bits)
+        if np.mean(patch) > 15000:
             return cv2.resize(patch, (size, size), interpolation=cv2.INTER_AREA)
             
-    # Fallback se falhar as 20 tentativas (tenta tirar do centro exato da imagem)
+    # Fallback se falhar as 30 tentativas (tenta tirar do centro exato da imagem)
     return None
 
 # ================= EXECUÇÃO =================

@@ -100,7 +100,7 @@ def evaluate_test_set():
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
     
     # 2. Inicializar o Modelo e Carregar Pesos
-    model = timm.create_model('convnext_base.fb_in22k', pretrained=False, in_chans=1, num_classes=1)
+    model = timm.create_model('timm/convnext_small.in12k_ft_in1k_384', pretrained=False, in_chans=1, num_classes=1)
     model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
     model = model.to(DEVICE)
     model.eval()

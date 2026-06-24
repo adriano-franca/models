@@ -90,7 +90,7 @@ def train_patch_model():
         name="Patch-Classifier-ConvNeXt-Final",    
         config={
             "learning_rate": LR,
-            "architecture": "convnext_base.fb_in22k",
+            "architecture": "timm/convnext_small.in12k_ft_in1k_384",
             "epochs": EPOCHS,
             "batch_size": BATCH_SIZE,
             "image_size": 224
@@ -113,7 +113,7 @@ def train_patch_model():
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
     
     # Inicializa a ConvNeXt Base
-    model = timm.create_model('convnext_base.fb_in22k', pretrained=True, in_chans=1, num_classes=1)
+    model = timm.create_model('timm/convnext_small.in12k_ft_in1k_384', pretrained=False, in_chans=1, num_classes=1)
     model = model.to(DEVICE)
     
     # Cálculo do pos_weight para balanceamento do BCE Loss
@@ -127,7 +127,7 @@ def train_patch_model():
     
     melhor_mcc = -1.0
     os.makedirs('checkpoints', exist_ok=True)
-    caminho_save = 'checkpoints/best_patch_classifier_modified.pth'
+    caminho_save = 'checkpoints/patch_classifier_convnext_small.in12k_ft_in1k_384.pth'
     
     # ================= LOOP DE TREINO =================
     for epoch in range(EPOCHS):

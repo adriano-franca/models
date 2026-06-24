@@ -9,7 +9,8 @@ import numpy as np
 import random
 import wandb
 
-from sklearn.metrics import roc_auc_score, matthews_corrcoef, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score, precision_recall_curve
+# Removida a importação do precision_recall_curve pois não será mais utilizada
+from sklearn.metrics import roc_auc_score, matthews_corrcoef, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
 import matplotlib.pyplot as plt
 import seaborn as sns
 from captum.attr import GuidedGradCam
@@ -98,14 +99,13 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
             "learning_rate": lr,
             "accumulation_steps": accumulation_steps,
             "arquitetura": "DualViewClassifier",
-            "pos_weight": 8.0
+            "pos_weight": 4.0
         }
     )
 
     df = pd.read_csv('breast-level_annotations_grouped_80_10_10(2).csv')
     train_df = df[df['split'] == 'training'].reset_index(drop=True)
     valid_df = df[df['split'] == 'validation'].reset_index(drop=True)
-    test_df = df[df['split'] == 'test'].reset_index(drop=True)
 
     train_dataset = TwoViewMammogramDataset(train_df, transform=get_train_transforms())
     valid_dataset = TwoViewMammogramDataset(valid_df, transform=get_valid_transforms())
@@ -113,9 +113,9 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
-    model = DualViewClassifier(pretrained_patch_path='checkpoints/best_patch_classifier_modified.pth').to(device)
+    model = DualViewClassifier(pretrained_patch_path='checkpoints/patch_classifier_convnext_small.in12k_ft_in1k_384.pth').to(device)
 
-    peso_anormal = torch.tensor([8.0]).to(device)
+    peso_anormal = torch.tensor([4.0]).to(device)
     criterion = nn.BCEWithLogitsLoss(pos_weight=peso_anormal)
 
     optimizer = AdamW(model.parameters(), lr=lr, weight_decay=1e-2)
@@ -186,17 +186,11 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
         all_labels = np.array(all_labels)
         all_probs = np.array(all_probs)
 
-        precisions, recalls, thresholds = precision_recall_curve(all_labels, all_probs)
-        meta_sensibilidade = 0.90
-        indices_validos = np.where(recalls[:-1] >= meta_sensibilidade)[0]
-
-        if len(indices_validos) > 0:
-            indice_escolhido = indices_validos[np.argmax(precisions[indices_validos])]
-            melhor_limiar_epoca = thresholds[indice_escolhido]
-        else:
-            melhor_limiar_epoca = 0.50
-        
+        # ================= ALTERAÇÃO AQUI =================
+        # Limiar fixo tradicional em 0.50, removendo a busca na curva PR
+        melhor_limiar_epoca = 0.50
         all_preds = (all_probs >= melhor_limiar_epoca).astype(int)
+        # ==================================================
 
         try:
             val_auc = roc_auc_score(all_labels, all_probs)

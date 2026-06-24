@@ -10,7 +10,7 @@ import random
 CSV_PATH = 'finding_annotations_split.csv'
 BASE_DIR = '/backup/lucas/datasets/vindr-mammo/images'
 OUTPUT_DIR = 'dataset_patches'
-PATCH_SIZE = 224
+PATCH_SIZE = 384
 
 # Cria as pastas para as duas classes
 os.makedirs(os.path.join(OUTPUT_DIR, 'normal'), exist_ok=True)
@@ -28,7 +28,7 @@ def load_dicom_image(filepath):
     img = (img * 65535.0).astype(np.uint16)
     return img
 
-def crop_and_resize(img, xmin, ymin, xmax, ymax, size=224):
+def crop_and_resize(img, xmin, ymin, xmax, ymax, size=384):
     h, w = img.shape
     cx = (xmin + xmax) // 2
     cy = (ymin + ymax) // 2
@@ -47,7 +47,7 @@ def crop_and_resize(img, xmin, ymin, xmax, ymax, size=224):
         patch = cv2.resize(patch, (size, size), interpolation=cv2.INTER_AREA)
     return patch
 
-def extract_normal_patch(img, size=224):
+def extract_normal_patch(img, size=384):
     h, w = img.shape
     
     crop_size = random.randint(150, 450) 

@@ -1,10 +1,8 @@
 import torch
 from torch.utils.data import Dataset
-import pandas as pd
 import numpy as np
 import os
 import albumentations as A
-import albumentations.pytorch as AP
 
 from src.preprocessing import process_dicom
 
@@ -14,7 +12,7 @@ def get_train_transforms():
     return A.Compose([
     A.HorizontalFlip(p=0.5),
     A.VerticalFlip(p=0.5),
-    A.Affine(scale=(0.8, 1.2), rotate=[-25,25], shear=[-12, 12], p=0.8),
+    A.Affine(scale=(1.0, 1.0), rotate=[-15, 15], shear=[-10, 10], p=0.8),
     A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.0, p=0.5),
     A.ToTensorV2()
     ])

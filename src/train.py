@@ -9,7 +9,6 @@ import numpy as np
 import random
 import wandb
 
-# Removida a importação do precision_recall_curve pois não será mais utilizada
 from sklearn.metrics import roc_auc_score, matthews_corrcoef, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -17,6 +16,18 @@ from captum.attr import GuidedGradCam
 
 from src.dataset import TwoViewMammogramDataset, get_train_transforms, get_valid_transforms
 from src.models import DualViewClassifier
+
+# ================= REPRODUTIBILIDADE =================
+def seed_everything(seed=42):
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+seed_everything(42)
 
 def plot_confusion_matrix(y_true, y_pred, epoch, output_dir="plots"):
     cm = confusion_matrix(y_true, y_pred)
@@ -91,7 +102,7 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
     os.makedirs('plots', exist_ok=True)
 
     wandb.init(
-        project="mestrado-visao-mamografia", 
+        project="mestrado-visao-mamografia-dualview", # Alterado para distinguir do modelo de patches
         name=f"DualView-PetriniModified-bs{batch_size}-acc{accumulation_steps}", 
         config={
             "epochs": epochs,
@@ -99,11 +110,12 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
             "learning_rate": lr,
             "accumulation_steps": accumulation_steps,
             "arquitetura": "DualViewClassifier",
-            "pos_weight": 4.0
+            "pos_weight": 20.0
         }
     )
 
-    df = pd.read_csv('breast-level_annotations_grouped_80_10_10(2).csv')
+    # Corrigido o uso da variável csv_path
+    df = pd.read_csv(csv_path)
     train_df = df[df['split'] == 'training'].reset_index(drop=True)
     valid_df = df[df['split'] == 'validation'].reset_index(drop=True)
 
@@ -113,12 +125,16 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
+    # Integração do seu modelo de patches campeão
     model = DualViewClassifier(pretrained_patch_path='checkpoints/patch_classifier_convnext_small.in12k_ft_in1k_384.pth').to(device)
 
-    peso_anormal = torch.tensor([4.0]).to(device)
+    peso_anormal = torch.tensor([20.0]).to(device)
     criterion = nn.BCEWithLogitsLoss(pos_weight=peso_anormal)
 
     optimizer = AdamW(model.parameters(), lr=lr, weight_decay=1e-2)
+    
+    # Inicializa o Scaler para Mixed Precision (Aceleração e Poupança de Memória)
+    scaler = torch.amp.GradScaler('cuda')
 
     best_mcc = -1.0
 
@@ -147,14 +163,17 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
             img_cc, img_mlo = img_cc.to(device), img_mlo.to(device)
             labels = labels.to(device).unsqueeze(1)
 
-            outputs = model(img_cc, img_mlo)
-            loss = criterion(outputs, labels)
-            
-            loss = loss / accumulation_steps
-            loss.backward()
+            # Uso do Mixed Precision
+            with torch.amp.autocast('cuda'):
+                outputs = model(img_cc, img_mlo)
+                loss = criterion(outputs, labels)
+                loss = loss / accumulation_steps
+
+            scaler.scale(loss).backward()
 
             if ((batch_idx + 1) % accumulation_steps == 0) or (batch_idx + 1 == len(train_loader)):
-                optimizer.step()
+                scaler.step(optimizer)
+                scaler.update()
                 optimizer.zero_grad()
 
             train_loss += loss.item() * accumulation_steps
@@ -173,8 +192,10 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
                 img_cc, img_mlo = img_cc.to(device), img_mlo.to(device)
                 labels = labels.to(device).unsqueeze(1)
 
-                outputs = model(img_cc, img_mlo)
-                loss = criterion(outputs, labels)
+                with torch.amp.autocast('cuda'):
+                    outputs = model(img_cc, img_mlo)
+                    loss = criterion(outputs, labels)
+                    
                 valid_loss += loss.item()
 
                 probs = torch.sigmoid(outputs).cpu().numpy()
@@ -186,11 +207,9 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
         all_labels = np.array(all_labels)
         all_probs = np.array(all_probs)
 
-        # ================= ALTERAÇÃO AQUI =================
-        # Limiar fixo tradicional em 0.50, removendo a busca na curva PR
+        # Limiar fixo tradicional em 0.50
         melhor_limiar_epoca = 0.50
         all_preds = (all_probs >= melhor_limiar_epoca).astype(int)
-        # ==================================================
 
         try:
             val_auc = roc_auc_score(all_labels, all_probs)
@@ -258,4 +277,5 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
     wandb.finish()
 
 if __name__ == "__main__":
+    # Agora sim, lendo corretamente o ficheiro passado como argumento
     train_dual_view_model('breast-level_annotations_final_limpo(2).csv')

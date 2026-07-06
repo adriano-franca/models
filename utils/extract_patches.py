@@ -1,130 +1,121 @@
 import os
 import pandas as pd
-import numpy as np
 import pydicom
-from PIL import Image
+import numpy as np
+import cv2
 from tqdm import tqdm
+import random
 
-# ---------------------------------------------------------
-# 1. CONFIGURAÇÕES
-# ---------------------------------------------------------
-CSV_PATH = "finding_annotations.csv"
-DICOM_DIR = "/backup/lucas/datasets/vindr-mammo/images"                 # Onde estão as suas pastas de pacientes (study_id)
-OUTPUT_DIR = "./patches_dataset" # Nova pasta onde os recortes PNG serão guardados
-OUTPUT_CSV = "patches_annotations.csv"
+# ================= CONFIGURAÇÕES =================
+CSV_PATH = 'finding_annotations.csv'
+BASE_DIR = '/backup/lucas/datasets/vindr-mammo/images'
+OUTPUT_DIR = 'dataset_patches'
+PATCH_SIZE = 224
 
-PATCH_SIZE = 512
-STRIDE = 256
-BG_THRESHOLD = 15
+os.makedirs(os.path.join(OUTPUT_DIR, 'normal'), exist_ok=True)
+os.makedirs(os.path.join(OUTPUT_DIR, 'anormal'), exist_ok=True)
+# =================================================
 
-# ---------------------------------------------------------
-# 2. FUNÇÕES AUXILIARES
-# ---------------------------------------------------------
-def check_overlap(patch, lesion):
-    """Verifica se o recorte interseta a caixa delimitadora (bounding box) da anomalia."""
-    ix_min, iy_min = max(patch[0], lesion[0]), max(patch[1], lesion[1])
-    ix_max, iy_max = min(patch[2], lesion[2]), min(patch[3], lesion[3])
-    return (ix_min < ix_max) and (iy_min < iy_max)
-
-def create_dirs():
-    """Garante que a pasta de saída existe."""
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
-
-# ---------------------------------------------------------
-# 3. LÓGICA PRINCIPAL DE EXTRAÇÃO
-# ---------------------------------------------------------
-def main():
-    create_dirs()
-    print("A carregar anotações...")
-    df = pd.read_csv(CSV_PATH)
+def load_dicom_image(filepath):
+    dicom = pydicom.dcmread(filepath)
+    img = dicom.pixel_array.astype(np.float32)
     
-    # Agrupar as anotações por imagem para não abrir o mesmo DICOM várias vezes
-    grouped = df.groupby('image_id')
-    
-    new_csv_data = []
-    
-    print(f"Iniciando a extração para {len(grouped)} imagens DICOM...")
-    
-    # tqdm cria a barra de progresso para acompanharmos o tempo restante
-    for image_id, group in tqdm(grouped, desc="A extrair recortes"):
-        study_id = group.iloc[0]['study_id']
-        img_label = 0.0 if group.iloc[0]['finding_categories'] == "['No Finding']" else 1.0
+    if dicom.PhotometricInterpretation == "MONOCHROME1":
+        img = np.max(img) - img
         
-        # Mapear as caixas delimitadoras (lesões) desta imagem
-        boxes = []
-        for _, row in group.iterrows():
-            if pd.notnull(row['xmin']) and row['finding_categories'] != "['No Finding']":
-                boxes.append([row['xmin'], row['ymin'], row['xmax'], row['ymax']])
+    img = (img - np.min(img)) / (np.max(img) - np.min(img) + 1e-8)
+    img = (img * 65535.0).astype(np.uint16)
+    return img
+
+def crop_and_resize(img, xmin, ymin, xmax, ymax, size=224):
+    h, w = img.shape
+    cx = (xmin + xmax) // 2
+    cy = (ymin + ymax) // 2
+    
+    box_w = xmax - xmin
+    box_h = ymax - ymin
+    side = int(max(box_w, box_h) * 1.1) 
+    
+    new_xmin = max(0, cx - side // 2)
+    new_ymin = max(0, cy - side // 2)
+    new_xmax = min(w, cx + side // 2)
+    new_ymax = min(h, cy + side // 2)
+    
+    patch = img[new_ymin:new_ymax, new_xmin:new_xmax]
+    if patch.size > 0:
+        patch = cv2.resize(patch, (size, size), interpolation=cv2.INTER_AREA)
+    return patch
+
+def extract_normal_patch(img, size=224):
+    h, w = img.shape
+    crop_size = min(500, h, w) 
+    
+    for _ in range(10): 
+        rx = random.randint(0, w - crop_size)
+        ry = random.randint(0, h - crop_size)
+        patch = img[ry:ry+crop_size, rx:rx+crop_size]
         
-        # Caminho para o ficheiro DICOM
-        dicom_path = os.path.join(DICOM_DIR, study_id, f"{image_id}.dicom")
-        
-        if not os.path.exists(dicom_path):
-            continue # Salta se o ficheiro não existir
+        if np.mean(patch) > 20:
+            return cv2.resize(patch, (size, size), interpolation=cv2.INTER_AREA)
             
-        try:
-            dcm = pydicom.dcmread(dicom_path)
-            img = dcm.pixel_array
-        except Exception as e:
-            continue
-            
-        h, w = img.shape
-        
-        # Varrer a imagem em formato de grelha
-        for y in range(0, h - PATCH_SIZE + 1, STRIDE):
-            for x in range(0, w - PATCH_SIZE + 1, STRIDE):
-                
-                # Extrair o recorte
-                y_max = min(y + PATCH_SIZE, h)
-                x_max = min(x + PATCH_SIZE, w)
-                patch_img = img[y:y_max, x:x_max]
-                
-                # Preenchimento (padding) caso o recorte bata na borda e seja menor que 512
-                if patch_img.shape[0] < PATCH_SIZE or patch_img.shape[1] < PATCH_SIZE:
-                    pad_y = PATCH_SIZE - patch_img.shape[0]
-                    pad_x = PATCH_SIZE - patch_img.shape[1]
-                    patch_img = np.pad(patch_img, ((0, pad_y), (0, pad_x)), mode='constant')
-                
-                # Descartar recortes que são quase totalmente fundo preto
-                if patch_img.mean() <= BG_THRESHOLD:
-                    continue
-                
-                # Determinar o rótulo deste recorte
-                patch_box = [x, y, x + PATCH_SIZE, y + PATCH_SIZE]
-                label = 0.0
-                for box in boxes:
-                    if check_overlap(patch_box, box):
-                        label = 1.0
-                        break
-                
-                # Guardar a imagem PNG
-                patch_filename = f"{image_id}_x{x}_y{y}.png"
-                patch_filepath = os.path.join(OUTPUT_DIR, patch_filename)
-                
-                # Converter para PIL e guardar (otimizado para não perder textura)
-                pil_img = Image.fromarray(patch_img).convert('L') # 'L' para tons de cinza
-                pil_img.save(patch_filepath)
-                
-                # Registar no novo CSV
-                new_csv_data.append({
-                    'patch_filename': patch_filename,
-                    'image_id': image_id,
-                    'study_id': study_id,
-                    'x': x,
-                    'y': y,
-                    'label': label,
-                    'img_label': img_label
-                })
+    cy, cx = h//2, w//2
+    patch = img[cy-crop_size//2:cy+crop_size//2, cx-crop_size//2:cx+crop_size//2]
+    return cv2.resize(patch, (size, size), interpolation=cv2.INTER_AREA)
 
-    # Guardar o novo dataset tabular
-    print("\nA extração foi concluída! A guardar o novo CSV...")
-    new_df = pd.DataFrame(new_csv_data)
-    new_df.to_csv(OUTPUT_CSV, index=False)
+# ================= EXECUÇÃO =================
+print("A carregar o ficheiro de anotações...")
+df = pd.read_csv(CSV_PATH)
+
+count_anormal = 0
+count_normal = 0
+erros_leitura = 0
+
+print("A extrair recortes... Isto pode demorar alguns minutos.")
+for idx, row in tqdm(df.iterrows(), total=len(df)):
+    study_id = str(row['study_id'])
+    image_id = str(row['image_id'])
     
-    print(f"Sucesso! {len(new_df)} recortes válidos foram gerados.")
-    print(f"As imagens estão em: {OUTPUT_DIR}")
-    print(f"O ficheiro de controlo é: {OUTPUT_CSV}")
+    dicom_path = os.path.join(BASE_DIR, study_id, f"{image_id}.dicom")
+    if not os.path.exists(dicom_path):
+        continue
+        
+    # LÓGICA BLINDADA: Tem coordenada = Lesão. Não tem = Normal.
+    has_bbox = not pd.isna(row['xmin'])
+    
+    # Se for NORMAL, descartamos 80% logo aqui no início para ser mais rápido
+    if not has_bbox:
+        # Forçamos a guardar as primeiras 50 para você ver a pasta encher rápido
+        chance_de_guardar = 1.0 if count_normal < 50 else 0.2
+        if random.random() > chance_de_guardar:
+            continue # Ignora esta imagem e vai para a próxima
+            
+    try:
+        img = load_dicom_image(dicom_path)
+        
+        if has_bbox:
+            # É ANORMAL (Tem Bounding Box)
+            xmin, ymin = int(float(row['xmin'])), int(float(row['ymin']))
+            xmax, ymax = int(float(row['xmax'])), int(float(row['ymax']))
+            
+            patch = crop_and_resize(img, xmin, ymin, xmax, ymax, PATCH_SIZE)
+            if patch is not None and patch.size > 0:
+                save_path = os.path.join(OUTPUT_DIR, 'anormal', f"{image_id}_{idx}.png")
+                cv2.imwrite(save_path, patch)
+                count_anormal += 1
+                
+        else:
+            # É NORMAL (Sem coordenadas)
+            patch = extract_normal_patch(img, PATCH_SIZE)
+            if patch is not None and patch.size > 0:
+                save_path = os.path.join(OUTPUT_DIR, 'normal', f"{image_id}_{idx}.png")
+                cv2.imwrite(save_path, patch)
+                count_normal += 1
+                
+    except Exception as e:
+        erros_leitura += 1
 
-if __name__ == '__main__':
-    main()
+print("\n=== EXTRAÇÃO CONCLUÍDA ===")
+print(f"Patches Anormais: {count_anormal}")
+print(f"Patches Normais: {count_normal}")
+if erros_leitura > 0:
+    print(f"Aviso: {erros_leitura} imagens não puderam ser lidas (DICOM corrompido).")

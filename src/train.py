@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 from torch.optim import AdamW
 from tqdm import tqdm
 import pandas as pd
+from torch.utils.data import WeightedRandomSampler
 import numpy as np
 import random
 import wandb
@@ -122,14 +123,32 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
     train_dataset = TwoViewMammogramDataset(train_df, transform=get_train_transforms())
     valid_dataset = TwoViewMammogramDataset(valid_df, transform=get_valid_transforms())
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    coluna_rotulo = 'target'
+
+    contagem_classes = train_df[coluna_rotulo].value_counts().to_dict()
+    total_amostras = len(train_df)
+
+    pesos_classes = {
+        0: total_amostras / contagem_classes[0],
+        1: total_amostras / contagem_classes[1]
+    }
+
+    pesos_amostras = [pesos_classes[row[coluna_rotulo]] for _, row in train_df.iterrows()]
+    pesos_amostras = torch.DoubleTensor(pesos_amostras)
+
+    sampler = WeightedRandomSampler(
+        weights=pesos_amostras,
+        num_samples=len(pesos_amostras),
+        replacement=True
+    )
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=sampler, num_workers=4, pin_memory=True)
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     # Integração do seu modelo de patches campeão
     model = DualViewClassifier(pretrained_patch_path='checkpoints/patch_classifier_convnext_small.in12k_ft_in1k_384.pth').to(device)
 
-    peso_anormal = torch.tensor([20.0]).to(device)
-    criterion = nn.BCEWithLogitsLoss(pos_weight=peso_anormal)
+    criterion = nn.BCEWithLogitsLoss()
 
     optimizer = AdamW(model.parameters(), lr=lr, weight_decay=1e-2)
     

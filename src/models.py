@@ -41,15 +41,10 @@ class DualViewClassifier(nn.Module):
 
         self.backbone = timm.create_model('timm/convnext_small.in12k_ft_in1k_384', pretrained=True, num_classes=0, in_chans=1)
 
-        '''# TODO: Lógica para carregar os pesos de `single_view_model_path` 
-        # self.backbone.load_state_dict(torch.load(single_view_model_path), strict=False)'''
-
         if pretrained_patch_path and os.path.exists(pretrained_patch_path):
             print(f"Carregando pesos pré-treinados de patches: {pretrained_patch_path}")
             patch_state = torch.load(pretrained_patch_path)
-
             patch_state = {k: v for k, v in patch_state.items() if 'head' not in k}
-
             self.backbone.load_state_dict(patch_state, strict=False)
             print("Pesos carregados")
         else:
@@ -57,33 +52,29 @@ class DualViewClassifier(nn.Module):
 
         in_channels = self.backbone.num_features
 
-        self.reducer = nn.Sequential(
-            nn.Conv2d(in_channels*2, in_channels, kernel_size=1, stride=1, bias=False),
-            nn.BatchNorm2d(in_channels),
-            nn.GELU()
-        )
-
         self.global_pool = nn.AdaptiveMaxPool2d((1, 1))
         self.flatten = nn.Flatten()
+        
         self.classifier = nn.Sequential(
             nn.Dropout(0.4),
-            nn.Linear(in_channels, 512),
+            nn.Linear(in_channels * 2, 512),
             nn.GELU(),
             nn.Dropout(0.4),
             nn.Linear(512, 1)
         )
 
     def forward(self, img_cc, img_mlo):
-
         feat_cc = self.backbone.forward_features(img_cc)
         feat_mlo = self.backbone.forward_features(img_mlo)
 
-        concat_features = torch.cat((feat_cc, feat_mlo), dim=1)
+        pooled_cc = self.global_pool(feat_cc)
+        pooled_mlo = self.global_pool(feat_mlo)
 
-        reduced = self.reducer(concat_features)
-        pooled = self.global_pool(reduced)
-        flattened = self.flatten(pooled)
+        flat_cc = self.flatten(pooled_cc)
+        flat_mlo = self.flatten(pooled_mlo)
 
-        out = self.classifier(flattened)
+        concat_features = torch.cat((flat_cc, flat_mlo), dim=1)
+
+        out = self.classifier(concat_features)
 
         return out

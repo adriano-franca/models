@@ -68,8 +68,10 @@ class TwoViewMammogramDataset(Dataset):
 
         label = self.df.iloc[idx]['target']
 
-        img_cc = process_dicom(path_cc)
-        img_mlo = process_dicom(path_mlo)
+        laterality = self.df.iloc[idx]['laterality']
+
+        img_cc = process_dicom(path_cc, laterality=laterality)
+        img_mlo = process_dicom(path_mlo, laterality=laterality)
 
         img_cc = np.squeeze(img_cc)
         img_mlo = np.squeeze(img_mlo)

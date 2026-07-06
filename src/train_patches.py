@@ -12,7 +12,7 @@ from sklearn.metrics import roc_auc_score, matthews_corrcoef
 
 # ================= CONFIGURAÇÕES =================
 PATCHES_DIR = 'dataset_patches'
-BATCH_SIZE = 32
+BATCH_SIZE = 8
 EPOCHS = 10
 LR = 1e-4
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -81,7 +81,7 @@ def train_patch_model():
     
     # Instanciar a ConvNeXt Base (Exatamente a mesma que usaremos depois)
     # in_chans=1 (porque é tons de cinza), num_classes=1 (porque é binário: normal/anormal)
-    model = timm.create_model('convnext_base_in22k', pretrained=True, in_chans=1, num_classes=1)
+    model = timm.create_model('convnext_base.fb_in22k', pretrained=True, in_chans=1, num_classes=1)
     model = model.to(DEVICE)
     
     # Calcular o peso das classes para evitar o "Colapso" (a rede prever tudo como 0)
@@ -143,7 +143,7 @@ def train_patch_model():
         # Guardar o melhor modelo
         if mcc > melhor_mcc:
             melhor_mcc = mcc
-            caminho_save = 'checkpoints/best_patch_classifier.pth'
+            caminho_save = 'checkpoints/best_patch_classifier_modified.pth'
             torch.save(model.state_dict(), caminho_save)
             print(f"Novo melhor modelo guardado! (MCC: {mcc:.4f})")
 

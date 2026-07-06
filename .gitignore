@@ -5,3 +5,14 @@ patches_dataset/
 plots/
 checkpoints/
 dataset_patches/
+log_patches.txt
+dataset_patches_224/
+dataset_patches_old/
+dataset_patches_red/
+dataset_patches_t/
+*.txt
+wandb/
+src/__pycache__/
+*.out
+teste_pipeline.png
+*.pyc

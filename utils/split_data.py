@@ -3,7 +3,7 @@ from sklearn.model_selection import train_test_split
 
 # 1. Carregar o dataset agrupado que criámos anteriormente
 print("A carregar o ficheiro CSV...")
-df = pd.read_csv('breast-level_annotations_grouped.csv')
+df = pd.read_csv('breast-level_annotations_grouped_2.csv')
 
 # 2. Obter a lista de pacientes ÚNICOS (study_id)
 # O VinDr-Mammo usa o study_id para representar a sessão do paciente
@@ -39,6 +39,6 @@ distribuicao = df['split'].value_counts(normalize=True) * 100
 print(distribuicao)
 
 # 8. Guardar o novo ficheiro
-novo_nome = 'breast-level_annotations_grouped_80_10_10.csv'
+novo_nome = 'breast-level_annotations_grouped_80_10_10(2).csv'
 df.to_csv(novo_nome, index=False)
 print(f"\n✅ Novo ficheiro guardado com sucesso: {novo_nome}")

@@ -56,10 +56,10 @@ class DualViewClassifier(nn.Module):
         self.flatten = nn.Flatten()
         
         self.classifier = nn.Sequential(
-            nn.Dropout(0.4),
+            nn.Dropout(0.2),
             nn.Linear(in_channels * 2, 512),
             nn.GELU(),
-            nn.Dropout(0.4),
+            nn.Dropout(0.2),
             nn.Linear(512, 1)
         )
 
@@ -78,3 +78,60 @@ class DualViewClassifier(nn.Module):
         out = self.classifier(concat_features)
 
         return out
+    
+class EnsembleDualViewClassifier(nn.Module):
+    def __init__(self, pretrained_patch_path=None):
+        super().__init__()
+
+        self.backbone_cc = timm.create_model('timm/convnext_small.in12k_ft_in1k_384', pretrained=True, num_classes=0, in_chans=1)
+        self.backbone_mlo = timm.create_model('timm/convnext_small.in12k_ft_in1k_384', pretrained=True, num_classes=0, in_chans=1)
+
+        if pretrained_patch_path and os.path.exists(pretrained_patch_path):
+            patch_state = torch.load(pretrained_patch_path)
+            patch_state = {k: v for k, v in patch_state.items() if 'head' not in k}
+            self.backbone_cc.load_state_dict(patch_state, strict=False)
+            self.backbone_mlo.load_state_dict(patch_state, strict=False)
+
+        in_channels = self.backbone_cc.num_features
+
+        # 1. Definir ambas as camadas de Pooling
+        self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.global_max_pool = nn.AdaptiveMaxPool2d((1, 1))
+        self.flatten = nn.Flatten()
+        
+        # 2. O canal de entrada do classificador agora é o DOBRO (porque vamos concatenar)
+        clf_in_channels = in_channels * 2
+
+        # 3. Mantém o Dropout ligeiramente mais baixo (0.2)
+        self.classifier_cc = nn.Sequential(
+            nn.Dropout(0.2),
+            nn.Linear(clf_in_channels, 256),
+            nn.GELU(),
+            nn.Dropout(0.2),
+            nn.Linear(256, 1)
+        )
+        
+        self.classifier_mlo = nn.Sequential(
+            nn.Dropout(0.2),
+            nn.Linear(clf_in_channels, 256),
+            nn.GELU(),
+            nn.Dropout(0.2),
+            nn.Linear(256, 1)
+        )
+
+    def forward(self, img_cc, img_mlo):
+        # Vista CC: Extrai, faz os dois poolings e concatena
+        feat_cc = self.backbone_cc.forward_features(img_cc)
+        avg_cc = self.flatten(self.global_avg_pool(feat_cc))
+        max_cc = self.flatten(self.global_max_pool(feat_cc))
+        pool_cc = torch.cat([avg_cc, max_cc], dim=1)
+        out_cc = self.classifier_cc(pool_cc)
+
+        # Vista MLO: Extrai, faz os dois poolings e concatena
+        feat_mlo = self.backbone_mlo.forward_features(img_mlo)
+        avg_mlo = self.flatten(self.global_avg_pool(feat_mlo))
+        max_mlo = self.flatten(self.global_max_pool(feat_mlo))
+        pool_mlo = torch.cat([avg_mlo, max_mlo], dim=1)
+        out_mlo = self.classifier_mlo(pool_mlo)
+
+        return out_cc, out_mlo

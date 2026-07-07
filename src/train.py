@@ -16,7 +16,7 @@ import seaborn as sns
 from captum.attr import GuidedGradCam
 
 from src.dataset import TwoViewMammogramDataset, get_train_transforms, get_valid_transforms
-from src.models import DualViewClassifier
+from src.models import EnsembleDualViewClassifier
 
 # ================= REPRODUTIBILIDADE =================
 def seed_everything(seed=42):
@@ -54,21 +54,34 @@ def plot_gradcam(model, valid_dataset, device, predicted_label, epoch, idx, outp
 
     target_label = label.item() if isinstance(label, torch.Tensor) else label
 
-    layer_alvo = model.backbone.stages[-1]
+    # --- WRAPPERS PARA O GRAD-CAM ---
+    class SingleViewWrapper(nn.Module):
+        def __init__(self, backbone, pool, flatten, classifier):
+            super().__init__()
+            self.backbone = backbone; self.pool = pool; self.flatten = flatten; self.classifier = classifier
+        def forward(self, x):
+            return self.classifier(self.flatten(self.pool(self.backbone.forward_features(x))))
 
-    guided_gc = GuidedGradCam(model, layer_alvo)
+    model_cc = SingleViewWrapper(model.backbone_cc, model.global_pool_cc, model.flatten, model.classifier_cc)
+    model_mlo = SingleViewWrapper(model.backbone_mlo, model.global_pool_mlo, model.flatten, model.classifier_mlo)
 
-    attr_cc, attr_mlo = guided_gc.attribute((img_cc, img_mlo), target=0)
+    layer_alvo_cc = model_cc.backbone.stages[-1]
+    layer_alvo_mlo = model_mlo.backbone.stages[-1]
 
+    guided_gc_cc = GuidedGradCam(model_cc, layer_alvo_cc)
+    guided_gc_mlo = GuidedGradCam(model_mlo, layer_alvo_mlo)
+
+    attr_cc = guided_gc_cc.attribute(img_cc, target=0)
+    attr_mlo = guided_gc_mlo.attribute(img_mlo, target=0)
+
+    # O resto do código do heatmap mantém-se igual
     heatmap_cc = attr_cc.squeeze().cpu().detach().numpy()
     heatmap_cc = np.abs(heatmap_cc)
-    if heatmap_cc.max() > 0:
-        heatmap_cc /= heatmap_cc.max()
+    if heatmap_cc.max() > 0: heatmap_cc /= heatmap_cc.max()
 
     heatmap_mlo = attr_mlo.squeeze().cpu().detach().numpy()
     heatmap_mlo = np.abs(heatmap_mlo)
-    if heatmap_mlo.max() > 0:
-        heatmap_mlo /= heatmap_mlo.max()
+    if heatmap_mlo.max() > 0: heatmap_mlo /= heatmap_mlo.max()
 
     viz_cc = img_cc.squeeze().cpu().detach().numpy()
     viz_mlo = img_mlo.squeeze().cpu().detach().numpy()
@@ -79,16 +92,16 @@ def plot_gradcam(model, valid_dataset, device, predicted_label, epoch, idx, outp
     str_previsto = "Anormal" if predicted_label == 1 else "Normal"
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 8))
-    fig.suptitle(f'Guided Grad-CAM - Época {epoch+1} | Paciente: #{idx}\nRótulo Real: {str_real} | Previsto pela Rede: {str_previsto}', fontsize=16, fontweight='bold')
+    fig.suptitle(f'Guided Grad-CAM (Ensemble) - Época {epoch+1} | Paciente: #{idx}\nRótulo Real: {str_real} | Previsto: {str_previsto}', fontsize=16, fontweight='bold')
 
     axes[0].imshow(viz_cc, cmap='gray')
     axes[0].imshow(heatmap_cc, cmap='magma', alpha=0.5) 
-    axes[0].set_title('Vista CC')
+    axes[0].set_title('Vista CC (Rede CC)')
     axes[0].axis('off')
 
     axes[1].imshow(viz_mlo, cmap='gray')
     axes[1].imshow(heatmap_mlo, cmap='magma', alpha=0.5)
-    axes[1].set_title('Vista Mediolateral Oblíqua (MLO)')
+    axes[1].set_title('Vista MLO (Rede MLO)')
     axes[1].axis('off')
 
     plt.tight_layout()
@@ -146,11 +159,16 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     # Integração do seu modelo de patches campeão
-    model = DualViewClassifier(pretrained_patch_path='checkpoints/patch_classifier_convnext_small.in12k_ft_in1k_384.pth').to(device)
+    model = EnsembleDualViewClassifier(pretrained_patch_path='checkpoints/patch_classifier_convnext_small.in12k_ft_in1k_384.pth').to(device)
 
     criterion = nn.BCEWithLogitsLoss()
 
-    optimizer = AdamW(model.parameters(), lr=lr, weight_decay=1e-2)
+    optimizer = AdamW([
+        {'params': model.backbone_cc.parameters(), 'lr': 1e-5},
+        {'params': model.backbone_mlo.parameters(), 'lr': 1e-5},
+        {'params': model.classifier_cc.parameters(), 'lr': 1e-4},
+        {'params': model.classifier_mlo.parameters(), 'lr': 1e-4}
+    ], weight_decay=1e-2)
     
     # Inicializa o Scaler para Mixed Precision (Aceleração e Poupança de Memória)
     scaler = torch.amp.GradScaler('cuda')
@@ -159,19 +177,6 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
 
     for epoch in range(epochs):
         print(f"\n--- Época {epoch+1}/{epochs} ---")
-
-        if epoch == 0:
-            print("\nCongelando o backbone...")
-            for param in model.backbone.parameters():
-                param.requires_grad = False
-                
-        elif epoch == 4:
-            print("\nDescongelando o backbone...")
-            for param in model.backbone.parameters():
-                param.requires_grad = True
-                
-            for g in optimizer.param_groups:
-                g['lr'] = 1e-5 
 
         model.train()
         train_loss = 0.0
@@ -184,8 +189,12 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
 
             # Uso do Mixed Precision
             with torch.amp.autocast('cuda'):
-                outputs = model(img_cc, img_mlo)
-                loss = criterion(outputs, labels)
+                out_cc, out_mlo = model(img_cc, img_mlo)
+                loss_cc = criterion(out_cc, labels)
+                loss_mlo = criterion(out_mlo, labels)
+                
+                # Loss final é a média das duas redes
+                loss = (loss_cc + loss_mlo) / 2.0 
                 loss = loss / accumulation_steps
 
             scaler.scale(loss).backward()
@@ -212,12 +221,19 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
                 labels = labels.to(device).unsqueeze(1)
 
                 with torch.amp.autocast('cuda'):
-                    outputs = model(img_cc, img_mlo)
-                    loss = criterion(outputs, labels)
+                    out_cc, out_mlo = model(img_cc, img_mlo)
+                    loss_cc = criterion(out_cc, labels)
+                    loss_mlo = criterion(out_mlo, labels)
+                    loss = (loss_cc + loss_mlo) / 2.0 
                     
                 valid_loss += loss.item()
 
-                probs = torch.sigmoid(outputs).cpu().numpy()
+                # ENSEMBLE: Sigmoide de cada vista, seguido da média
+                prob_cc = torch.sigmoid(out_cc)
+                prob_mlo = torch.sigmoid(out_mlo)
+                prob_ensemble = (prob_cc + prob_mlo) / 2.0
+                
+                probs = prob_ensemble.cpu().numpy()
                 all_probs.extend(probs)
                 all_labels.extend(labels.cpu().numpy())
 
@@ -280,7 +296,8 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
             "metrics/especificidade": val_spec,
             "metrics/f1_score": val_f1,
             "metrics/limiar": melhor_limiar_epoca,
-            "learning_rate": optimizer.param_groups[0]['lr'],
+            "learning_rate/backbone": optimizer.param_groups[0]['lr'],
+            "learning_rate/classifier": optimizer.param_groups[2]['lr'],
             "graficos/matriz_confusao": wandb.Image(cm_path),
             "graficos/grad_cam": wandb.Image(gc_path)
         })

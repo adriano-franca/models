@@ -4,22 +4,18 @@ import timm
 import os
 
 class PatchClassifier(nn.Module):
-    def __init__(self, num_classes=5, pretrained=True):
+    def __init__(self, num_classes=1, pretrained=True):
         super(PatchClassifier, self).__init__()
-        self.model = timm.create_model('timm/convnext_small.in12k_ft_in1k_384', pretrained=pretrained, num_classes=num_classes)
+        self.model = timm.create_model('timm/convnext_small.in12k_ft_in1k_384', pretrained=pretrained, in_chans=1, num_classes=num_classes)
 
     def forward(self, x):
         return self.model(x)
-    
 
 class SingleViewClassifier(nn.Module):
     def __init__(self, patch_model_path=None):
         super(SingleViewClassifier, self).__init__()
 
         self.backbone = timm.create_model('timm/convnext_small.in12k_ft_in1k_384', pretrained=True, num_classes=0, in_chans=1)
-
-        # TODO: Lógica para carregar os pesos de `patch_model_path` (se fornecido)
-        # self.backbone.load_state_dict(torch.load(patch_model_path), strict=False)
 
         self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.flatten = nn.Flatten()
@@ -99,10 +95,11 @@ class EnsembleDualViewClassifier(nn.Module):
         self.global_max_pool = nn.AdaptiveMaxPool2d((1, 1))
         self.flatten = nn.Flatten()
         
-        # 2. O canal de entrada do classificador agora é o DOBRO (porque vamos concatenar)
-        clf_in_channels = in_channels * 2
+        # ================= ALTERAÇÃO DENSIDADE =================
+        # 2. O canal de entrada = DOBRO da imagem + 4 posições do vetor BI-RADS
+        clf_in_channels = (in_channels * 2) + 4
+        # =======================================================
 
-        # 3. Mantém o Dropout ligeiramente mais baixo (0.2)
         self.classifier_cc = nn.Sequential(
             nn.Dropout(0.2),
             nn.Linear(clf_in_channels, 256),
@@ -119,19 +116,19 @@ class EnsembleDualViewClassifier(nn.Module):
             nn.Linear(256, 1)
         )
 
-    def forward(self, img_cc, img_mlo):
-        # Vista CC: Extrai, faz os dois poolings e concatena
+    def forward(self, img_cc, img_mlo, density):
+        # Vista CC: Extrai, faz os dois poolings e concatena COM A DENSIDADE
         feat_cc = self.backbone_cc.forward_features(img_cc)
         avg_cc = self.flatten(self.global_avg_pool(feat_cc))
         max_cc = self.flatten(self.global_max_pool(feat_cc))
-        pool_cc = torch.cat([avg_cc, max_cc], dim=1)
+        pool_cc = torch.cat([avg_cc, max_cc, density], dim=1)
         out_cc = self.classifier_cc(pool_cc)
 
-        # Vista MLO: Extrai, faz os dois poolings e concatena
+        # Vista MLO: Extrai, faz os dois poolings e concatena COM A DENSIDADE
         feat_mlo = self.backbone_mlo.forward_features(img_mlo)
         avg_mlo = self.flatten(self.global_avg_pool(feat_mlo))
         max_mlo = self.flatten(self.global_max_pool(feat_mlo))
-        pool_mlo = torch.cat([avg_mlo, max_mlo], dim=1)
+        pool_mlo = torch.cat([avg_mlo, max_mlo, density], dim=1)
         out_mlo = self.classifier_mlo(pool_mlo)
 
         return out_cc, out_mlo

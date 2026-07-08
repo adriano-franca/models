@@ -183,17 +183,16 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
         optimizer.zero_grad()
 
         loop = tqdm(train_loader, desc="Treino")
-        for batch_idx, (img_cc, img_mlo, labels) in enumerate(loop):
-            img_cc, img_mlo = img_cc.to(device), img_mlo.to(device)
+        for batch_idx, (img_cc, img_mlo, density, labels) in enumerate(loop):
+            img_cc, img_mlo, density = img_cc.to(device), img_mlo.to(device), density.to(device)
             labels = labels.to(device).unsqueeze(1)
 
-            # Uso do Mixed Precision
             with torch.amp.autocast('cuda'):
-                out_cc, out_mlo = model(img_cc, img_mlo)
+                # Passamos a densidade no forward
+                out_cc, out_mlo = model(img_cc, img_mlo, density)
                 loss_cc = criterion(out_cc, labels)
                 loss_mlo = criterion(out_mlo, labels)
                 
-                # Loss final é a média das duas redes
                 loss = (loss_cc + loss_mlo) / 2.0 
                 loss = loss / accumulation_steps
 
@@ -216,12 +215,13 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
         
         with torch.no_grad():
             loop_val = tqdm(valid_loader, desc="Validação")
-            for img_cc, img_mlo, labels in loop_val:
-                img_cc, img_mlo = img_cc.to(device), img_mlo.to(device)
+            for img_cc, img_mlo, density, labels in loop_val:
+                img_cc, img_mlo, density = img_cc.to(device), img_mlo.to(device), density.to(device)
                 labels = labels.to(device).unsqueeze(1)
 
                 with torch.amp.autocast('cuda'):
-                    out_cc, out_mlo = model(img_cc, img_mlo)
+                    # Passamos a densidade no forward
+                    out_cc, out_mlo = model(img_cc, img_mlo, density)
                     loss_cc = criterion(out_cc, labels)
                     loss_mlo = criterion(out_mlo, labels)
                     loss = (loss_cc + loss_mlo) / 2.0 

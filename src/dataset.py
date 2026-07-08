@@ -65,8 +65,19 @@ class TwoViewMammogramDataset(Dataset):
         path_mlo = os.path.join(BASE_DIR, paciente_mlo, arquivo_mlo)
 
         label = self.df.iloc[idx]['target']
-
         laterality = self.df.iloc[idx]['laterality']
+        
+        # ================= INJEÇÃO DE DENSIDADE (BI-RADS) =================
+        raw_density = str(self.df.iloc[idx].get('breast_density', 'C')).upper()
+        
+        # Mapeamento do BI-RADS para índice do vetor
+        density_map = {'A': 0, 'B': 1, 'C': 2, 'D': 3, '1': 0, '2': 1, '3': 2, '4': 3}
+        dens_idx = density_map.get(raw_density, 2) # Padrão para 'C' (Heterogeneamente densa) se falhar
+        
+        # Criação do Vetor One-Hot de 4 posições
+        density_tensor = torch.zeros(4, dtype=torch.float32)
+        density_tensor[dens_idx] = 1.0
+        # ==================================================================
 
         img_cc = process_dicom(path_cc, laterality=laterality)
         img_mlo = process_dicom(path_mlo, laterality=laterality)
@@ -84,4 +95,5 @@ class TwoViewMammogramDataset(Dataset):
             img_cc = torch.from_numpy(img_cc).unsqueeze(0)
             img_mlo = torch.from_numpy(img_mlo).unsqueeze(0)
         
-        return img_cc, img_mlo, torch.tensor(label, dtype=torch.float32)
+        # O retorno agora contém 4 elementos
+        return img_cc, img_mlo, density_tensor, torch.tensor(label, dtype=torch.float32)

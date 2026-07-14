@@ -12,16 +12,16 @@ from sklearn.metrics import roc_auc_score, matthews_corrcoef, confusion_matrix
 
 import matplotlib.pyplot as plt
 import seaborn as sns
-from captum.attr import LayerGradCam, LayerAttribution, GuidedGradCam
+from captum.attr import GuidedGradCam
 
 from src.dataset import TwoViewMammogramDataset, get_train_transforms, get_valid_transforms
-from src.models import DualViewClassifier
+from src.models import DualViewDenseNet
 
 def plot_confusion_matrix(y_true, y_pred, epoch, output_dir="plots"):
     cm = confusion_matrix(y_true, y_pred)
     plt.figure(figsize=(6, 5))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', cbar=False, xticklabels=['Normal', 'Anormal'], yticklabels=['Normal', 'Anormal'])
-    plt.title('Matriz de Confusão - Época {epoch+1}')
+    plt.title(f'Matriz de Confusão - Época {epoch+1}')
     plt.ylabel('Verdadeiro')
     plt.xlabel('Predição do Modelo')
     plt.tight_layout()
@@ -40,7 +40,7 @@ def plot_gradcam(model, valid_dataset, device, epoch, output_dir="plots"):
 
     target_label = label.item() if isinstance(label, torch.Tensor) else label
 
-    layer_alvo = model.backbone.stages[-1]
+    layer_alvo = model.backbone.features.denseblock4
 
     guided_gc = GuidedGradCam(model, layer_alvo)
 
@@ -78,7 +78,12 @@ def plot_gradcam(model, valid_dataset, device, epoch, output_dir="plots"):
     plt.savefig(os.path.join(output_dir, f'gradcam_epoch_{epoch+1}.png'))
     plt.close()
 
-def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=8, lr=1e-4):
+#def congelar_batchnorm(m):
+#    classname = m.__class__.__name__
+#    if classname.find('BatchNorm') != -1:
+#        m.eval()
+
+def train_dual_view_model(csv_path, epochs=15, batch_size=2, accumulation_steps=1, lr=1e-4):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"A usar o dispositivo: {device}")
 
@@ -93,11 +98,11 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
     train_dataset = TwoViewMammogramDataset(train_df, transform=get_train_transforms())
     valid_dataset = TwoViewMammogramDataset(valid_df, transform=get_valid_transforms())
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
-    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=False)
+    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False)
 
-    model = DualViewClassifier(pretrained_patch_path='checkpoints/best_patch_classifier.pth').to(device)
-
+    model = DualViewDenseNet(pretrained_patch_path='checkpoints/best_patch_densenet.pth').to(device)
+    
     peso_anormal = torch.tensor([8.0]).to(device)
     criterion = nn.BCEWithLogitsLoss(pos_weight=peso_anormal)
 
@@ -122,6 +127,7 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
                 g['lr'] = 1e-5 
 
         model.train()
+        #model.apply(congelar_batchnorm)
         train_loss = 0.0
         optimizer.zero_grad()
 
@@ -169,17 +175,29 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
         all_labels = np.array(all_labels)
         all_probs = np.array(all_probs)
         
-        # Limiar de 0.5 para decidir se é 0 (Normal) ou 1 (Anormal)
-        all_preds = (all_probs >= 0.5).astype(int)
+        melhor_mcc_epoca = -1.0
+        melhor_limiar_epoca = 0.5
+        
+        for limiar in np.arange(0.1, 0.9, 0.01):
+            preds_temporarias = (all_probs >= limiar).astype(int)
+            try:
+                mcc_temporario = matthews_corrcoef(all_labels, preds_temporarias)
+                if mcc_temporario > melhor_mcc_epoca:
+                    melhor_mcc_epoca = mcc_temporario
+                    melhor_limiar_epoca = limiar
+            except ValueError:
+                pass
+
+        all_preds = (all_probs >= melhor_limiar_epoca).astype(int)
 
         try:
             val_auc = roc_auc_score(all_labels, all_probs)
-            val_mcc = matthews_corrcoef(all_labels, all_preds)
+            val_mcc = melhor_mcc_epoca 
         except ValueError:
             val_auc, val_mcc = 0.0, 0.0 
 
         print(f"Perda: Treino {avg_train_loss:.4f} | Valid {avg_valid_loss:.4f}")
-        print(f"Métricas: AUC = {val_auc:.4f} | MCC = {val_mcc:.4f}")
+        print(f"Métricas: AUC = {val_auc:.4f} | MCC = {val_mcc:.4f} (com Limiar de {melhor_limiar_epoca:.2f})")
 
         plot_confusion_matrix(all_labels, all_preds, epoch)
 
@@ -190,8 +208,8 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=1, accumulation_steps=
         # Salvando o melhor modelo com base na MCC
         if val_mcc > best_mcc:
             best_mcc = val_mcc
-            torch.save(model.state_dict(), 'checkpoints/best_dual_view_model.pth')
-            print(">>> Novo melhor modelo guardado no disco! <<<")
+            torch.save(model.state_dict(), 'checkpoints/best_dual_view_densenet.pth')
+            print(f"🌟 >>> Novo melhor modelo guardado no disco! (MCC Otimizado: {best_mcc:.4f}) <<< 🌟")
 
 if __name__ == "__main__":
     train_dual_view_model('breast-level_annotations_final_limpo.csv')

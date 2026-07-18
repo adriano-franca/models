@@ -1,26 +1,19 @@
-#dataset.py
-
+# dataset.py
 import torch
 from torch.utils.data import Dataset
 import numpy as np
 import os
 import albumentations as A
-import cv2 # Certifique-se de instalar: pip install opencv-python
-
+import cv2 
 from src.preprocessing import process_dicom
 
 BASE_DIR = "/backup/lucas/datasets/vindr-mammo/images"
 
-# --- FUNÇÃO AUXILIAR ---
 def apply_clahe(img):
     img_uint8 = (img * 255).astype(np.uint8)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     return clahe.apply(img_uint8) / 255.0
 
-# ================= ALTERAÇÃO (c): REGULARIZAÇÃO / AUGMENTAÇÃO MAIS FORTE =================
-# Mesma lógica aplicada em train_patches.py: mais transformações e com maior probabilidade,
-# para reduzir overfitting. Também adicionamos translate ao Affine (antes só rotate/shear)
-# e a normalização final (antes as imagens saíam sem normalizar, só em [0, 1]).
 def get_train_transforms():
     return A.Compose([
         A.HorizontalFlip(p=0.5),
@@ -33,10 +26,9 @@ def get_train_transforms():
             p=0.8
         ),
         A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.0, p=0.5),
-        A.Sharpen(alpha=(0.2, 0.4), lightness=(0.8, 1.2), p=0.3),   # equivalente ao RandomAdjustSharpness
-        # A.Equalize removido: cv2.equalizeHist exige imagem uint8 de 1 canal (CV_8UC1) e
-        # quebra com nossas imagens float em [0,1] (cv2.error: Assertion failed em equalizeHist).
-        A.Normalize(mean=(0.5,), std=(0.5,), max_pixel_value=1.0),  # mesma normalização usada nos patches
+        # ALTERAÇÃO 5: Substituição do Sharpen pelo desfoque gaussiano
+        A.GaussianBlur(blur_limit=(3, 7), p=0.3),   
+        A.Normalize(mean=(0.5,), std=(0.5,), max_pixel_value=1.0), 
         A.ToTensorV2()
     ])
 
@@ -45,7 +37,6 @@ def get_valid_transforms():
         A.Normalize(mean=(0.5,), std=(0.5,), max_pixel_value=1.0),
         A.ToTensorV2()
     ])
-# =============================================================================================
 
 class TwoViewMammogramDataset(Dataset):
     def __init__(self, dataframe, transform=None):

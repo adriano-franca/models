@@ -124,59 +124,52 @@ class EnsembleDualViewClassifier(nn.Module):
         self.backbone_cc = timm.create_model('timm/convnext_small.in12k_ft_in1k_384', pretrained=True, num_classes=0, in_chans=1)
         self.backbone_mlo = timm.create_model('timm/convnext_small.in12k_ft_in1k_384', pretrained=True, num_classes=0, in_chans=1)
 
-        # ================= CORREÇÃO: carregamento de pesos via helper (remove prefixo 'backbone.') =================
-        # Antes: self.backbone_cc.load_state_dict(patch_state, strict=False) com patch_state
-        # ainda contendo o prefixo 'backbone.' nas chaves -> nenhuma chave batia -> os pesos
-        # pré-treinados do patch classifier NUNCA eram carregados, mesmo sem erro no log.
+        # OTIMIZAÇÃO DE MEMÓRIA: Ativa o Gradient Checkpointing para economizar VRAM
+        self.backbone_cc.set_grad_checkpointing(enable=True)
+        self.backbone_mlo.set_grad_checkpointing(enable=True)
+
         _carregar_pesos_backbone(self.backbone_cc, pretrained_patch_path, nome_debug="EnsembleDualView.backbone_cc")
         _carregar_pesos_backbone(self.backbone_mlo, pretrained_patch_path, nome_debug="EnsembleDualView.backbone_mlo")
-        # ==============================================================================================================
 
         in_channels = self.backbone_cc.num_features
 
-        # 1. Definir ambas as camadas de Pooling
+        # ALTERAÇÃO 3: Removido o global_max_pool. Apenas AvgPool mantido.
         self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.global_max_pool = nn.AdaptiveMaxPool2d((1, 1))
         self.flatten = nn.Flatten()
         
-        # ================= ALTERAÇÃO DENSIDADE =================
-        # 2. O canal de entrada = DOBRO da imagem + 4 posições do vetor BI-RADS
-        clf_in_channels = (in_channels * 2) + 4
-        # =======================================================
+        # ALTERAÇÃO 7: Camada linear intermediária para enriquecer o vetor BI-RADS
+        self.density_layer = nn.Sequential(
+            nn.Linear(4, 16),
+            nn.GELU()
+        )
 
-        # ================= ALTERAÇÃO (c): dropout subiu de 0.2 -> 0.35 (padrão dropout_rate) =================
-        # Mesmo valor usado no PatchClassifierWithDensity, para manter a regularização
-        # consistente entre os dois modelos e ajudar a conter o overfitting observado no log.
-        self.classifier_cc = nn.Sequential(
-            nn.Dropout(dropout_rate),
-            nn.Linear(clf_in_channels, 256),
-            nn.GELU(),
-            nn.Dropout(dropout_rate),
-            nn.Linear(256, 1)
-        )
+        # ALTERAÇÃO 4: Cabeça Unificada. Recebe in_channels da CC + MLO + 16 da densidade.
+        clf_in_channels = (in_channels * 2) + 16
         
-        self.classifier_mlo = nn.Sequential(
+        self.classifier = nn.Sequential(
             nn.Dropout(dropout_rate),
             nn.Linear(clf_in_channels, 256),
             nn.GELU(),
             nn.Dropout(dropout_rate),
-            nn.Linear(256, 1)
+            nn.Linear(256, 1) # Saída de logit único para a BCEWithLogitsLoss
         )
-        # ==========================================================================================================
 
     def forward(self, img_cc, img_mlo, density):
-        # Vista CC: Extrai, faz os dois poolings e concatena COM A DENSIDADE
+        # Vista CC
         feat_cc = self.backbone_cc.forward_features(img_cc)
         avg_cc = self.flatten(self.global_avg_pool(feat_cc))
-        max_cc = self.flatten(self.global_max_pool(feat_cc))
-        pool_cc = torch.cat([avg_cc, max_cc, density], dim=1)
-        out_cc = self.classifier_cc(pool_cc)
 
-        # Vista MLO: Extrai, faz os dois poolings e concatena COM A DENSIDADE
+        # Vista MLO
         feat_mlo = self.backbone_mlo.forward_features(img_mlo)
         avg_mlo = self.flatten(self.global_avg_pool(feat_mlo))
-        max_mlo = self.flatten(self.global_max_pool(feat_mlo))
-        pool_mlo = torch.cat([avg_mlo, max_mlo, density], dim=1)
-        out_mlo = self.classifier_mlo(pool_mlo)
+        
+        # Vetor de Densidade
+        dense_feat = self.density_layer(density)
 
-        return out_cc, out_mlo
+        # Concatenação Unificada
+        pool_concat = torch.cat([avg_cc, avg_mlo, dense_feat], dim=1)
+        
+        # ALTERAÇÃO 1 E 2: Predição unificada
+        out = self.classifier(pool_concat)
+
+        return out

@@ -77,6 +77,25 @@ def find_best_threshold(labels, probs):
 
 def plot_gradcam(model, valid_dataset, device, predicted_label, epoch, idx, output_dir="plots"):
     model.eval()
+
+    # ================= NOVA ALTERAÇÃO: DESATIVA O GRADIENT CHECKPOINTING DURANTE O GRAD-CAM =================
+    # O GuidedGradCam do Captum registra hooks nas ativações (GELU, no caso do ConvNeXt) para
+    # implementar a retropropagação guiada. O gradient checkpointing recalcula essas ativações
+    # durante o backward, o que gera incompatibilidade com esses hooks (RuntimeError observado em
+    # checkpoint_seq() -> MLP (self.act)). Como o Grad-CAM roda sobre UMA única imagem por vez,
+    # a economia de memória do checkpointing é irrelevante aqui — desativamos só durante esta
+    # função e reativamos logo depois (garantido via try/finally, mesmo se der erro no meio).
+    model.backbone_cc.set_grad_checkpointing(enable=False)
+    model.backbone_mlo.set_grad_checkpointing(enable=False)
+    try:
+        _plot_gradcam_interno(model, valid_dataset, device, predicted_label, epoch, idx, output_dir)
+    finally:
+        model.backbone_cc.set_grad_checkpointing(enable=True)
+        model.backbone_mlo.set_grad_checkpointing(enable=True)
+    # ============================================================================================================
+
+
+def _plot_gradcam_interno(model, valid_dataset, device, predicted_label, epoch, idx, output_dir="plots"):
     img_cc, img_mlo, density, label = valid_dataset[idx]
 
     img_cc = img_cc.unsqueeze(0).to(device).requires_grad_(True)
@@ -85,7 +104,11 @@ def plot_gradcam(model, valid_dataset, device, predicted_label, epoch, idx, outp
 
     target_label = label.item() if isinstance(label, torch.Tensor) else label
 
-    class UnifiedViewWrapper(nn.Module):
+    # ================= REVERSÃO: wrapper adaptado para saída em tupla (out_cc, out_mlo) =================
+    # Com o late fusion, model(...) volta a retornar (out_cc, out_mlo) em vez de um logit único.
+    # Cada wrapper roda o forward completo, mas expõe pro GuidedGradCam só o logit da vista
+    # que está sendo atribuída (a outra vista/densidade fica fixa nos valores do paciente atual).
+    class SingleViewWrapper(nn.Module):
         def __init__(self, model, view_type):
             super().__init__()
             self.model = model
@@ -93,12 +116,15 @@ def plot_gradcam(model, valid_dataset, device, predicted_label, epoch, idx, outp
 
         def forward(self, x):
             if self.view_type == 'cc':
-                return self.model(x, img_mlo, density)
+                out_cc, _ = self.model(x, img_mlo, density)
+                return out_cc
             else:
-                return self.model(img_cc, x, density)
+                _, out_mlo = self.model(img_cc, x, density)
+                return out_mlo
 
-    model_cc = UnifiedViewWrapper(model, 'cc')
-    model_mlo = UnifiedViewWrapper(model, 'mlo')
+    model_cc = SingleViewWrapper(model, 'cc')
+    model_mlo = SingleViewWrapper(model, 'mlo')
+    # ================================================================================================================
 
     layer_alvo_cc = model.backbone_cc.stages[-1]
     layer_alvo_mlo = model.backbone_mlo.stages[-1]
@@ -212,7 +238,8 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=2, accumulation_steps=
     optimizer = AdamW([
         {'params': model.backbone_cc.parameters(), 'lr': BACKBONE_LR_AFTER_UNFREEZE},
         {'params': model.backbone_mlo.parameters(), 'lr': BACKBONE_LR_AFTER_UNFREEZE},
-        {'params': model.classifier.parameters(), 'lr': 1e-4}
+        {'params': model.classifier_cc.parameters(), 'lr': 1e-4},
+        {'params': model.classifier_mlo.parameters(), 'lr': 1e-4}
     ], weight_decay=WEIGHT_DECAY)
 
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=LR_PLATEAU_FACTOR, patience=LR_PLATEAU_PATIENCE, min_lr=LR_PLATEAU_MIN_LR)
@@ -279,8 +306,12 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=2, accumulation_steps=
             labels = labels.to(device).unsqueeze(1)
 
             with torch.amp.autocast('cuda'):
-                out = model(img_cc, img_mlo, density)
-                loss = criterion(out, labels)
+                # ================= REVERSÃO: LATE FUSION =================
+                out_cc, out_mlo = model(img_cc, img_mlo, density)
+                loss_cc = criterion(out_cc, labels)
+                loss_mlo = criterion(out_mlo, labels)
+                loss = (loss_cc + loss_mlo) / 2.0
+                # ================================================================
 
             # ================= NOVA ALTERAÇÃO: PROTEÇÃO CONTRA LOSS NÃO-FINITA (NaN/Inf) =================
             # A perda de validação também virava NaN mesmo sem nenhum update de peso acontecer ali
@@ -351,9 +382,17 @@ def train_dual_view_model(csv_path, epochs=15, batch_size=2, accumulation_steps=
                 labels = labels.to(device).unsqueeze(1)
 
                 with torch.amp.autocast('cuda'):
-                    out = model(img_cc, img_mlo, density)
-                    loss = criterion(out, labels)
-                    prob_ensemble = torch.sigmoid(out)
+                    # ================= REVERSÃO: LATE FUSION =================
+                    out_cc, out_mlo = model(img_cc, img_mlo, density)
+                    loss_cc = criterion(out_cc, labels)
+                    loss_mlo = criterion(out_mlo, labels)
+                    loss = (loss_cc + loss_mlo) / 2.0
+
+                    # ENSEMBLE: sigmoide de cada vista, seguido da média aritmética simples
+                    prob_cc = torch.sigmoid(out_cc)
+                    prob_mlo = torch.sigmoid(out_mlo)
+                    prob_ensemble = (prob_cc + prob_mlo) / 2.0
+                    # ================================================================
 
                 # ================= NOVA ALTERAÇÃO: mesma proteção na validação =================
                 if not torch.isfinite(loss):

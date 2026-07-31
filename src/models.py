@@ -96,8 +96,20 @@ class EnsembleDualViewClassifier(nn.Module):
 
         in_channels = self.backbone_cc.num_features
 
-        self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.flatten = nn.Flatten()
+        # ================= CORREÇÃO CRÍTICA: NORMALIZAÇÃO PÓS-POOLING FALTANDO =================
+        # O ConvNeXt do timm NÃO normaliza dentro de forward_features() -- self.norm_pre é
+        # Identity() nessa variante. A LayerNorm2d real mora DENTRO de self.head (aplicada
+        # DEPOIS do pooling), e só é executada se chamarmos o forward COMPLETO do backbone.
+        # A versão anterior chamava forward_features() + pooling manual, pulando essa
+        # normalização inteiramente -- entregando features cruas (potencialmente com escala
+        # grande) para uma cabeça de classificação recém-inicializada. Combinado com o
+        # reescalonamento do dropout em modo treino (1/(1-p)), isso estourava o fp16 em
+        # praticamente todo batch (loss não-finita), mesmo com o backbone congelado.
+        # Chamar self.backbone_cc(x) diretamente (em vez de forward_features()) usa o forward
+        # padrão do timm -- que já inclui pooling global + LayerNorm2d + flatten, com fc=Identity()
+        # por causa de num_classes=0 -- exatamente como o PatchClassifierWithDensity já fazia
+        # (self.backbone(x)), o que explica por que aquele nunca teve esse problema.
+        # ==============================================================================================
 
         self.density_layer = nn.Sequential(
             nn.Linear(4, 16),
@@ -132,15 +144,14 @@ class EnsembleDualViewClassifier(nn.Module):
     def forward(self, img_cc, img_mlo, density):
         dense_feat = self.density_layer(density)
 
-        # Vista CC: features próprias + densidade -> cabeça própria -> logit próprio
-        feat_cc = self.backbone_cc.forward_features(img_cc)
-        avg_cc = self.flatten(self.global_avg_pool(feat_cc))
+        # Vista CC: forward completo do backbone (pool + LayerNorm2d + flatten embutidos,
+        # via num_classes=0 -> fc=Identity) -> concatena com densidade -> cabeça própria
+        avg_cc = self.backbone_cc(img_cc)
         pool_cc = torch.cat([avg_cc, dense_feat], dim=1)
         out_cc = self.classifier_cc(pool_cc)
 
-        # Vista MLO: features próprias + densidade -> cabeça própria -> logit próprio
-        feat_mlo = self.backbone_mlo.forward_features(img_mlo)
-        avg_mlo = self.flatten(self.global_avg_pool(feat_mlo))
+        # Vista MLO: idem
+        avg_mlo = self.backbone_mlo(img_mlo)
         pool_mlo = torch.cat([avg_mlo, dense_feat], dim=1)
         out_mlo = self.classifier_mlo(pool_mlo)
 
